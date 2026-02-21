@@ -17,16 +17,25 @@ venv/
 
 # Rust
 plimsoll-rpc/target/
+contracts/bitcoin/target/
+indexer/target/
 
 # Solidity / Foundry
 contracts/out/
 contracts/cache/
 contracts/broadcast/
+contracts/lib/
+contracts/foundry.lock
+
+# Solana / Anchor
+contracts/solana/target/
+contracts/solana/.anchor/
 
 # Node / Next.js
 dapp/node_modules/
 dapp/.next/
 dapp/out/
+dapp/.env.local
 
 # IDE
 .idea/
