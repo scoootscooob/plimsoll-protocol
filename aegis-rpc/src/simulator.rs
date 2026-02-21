@@ -51,6 +51,16 @@ pub async fn simulate_transaction(
         "Running pre-flight EVM simulation"
     );
 
+    // ── GOD-TIER 3: Pin simulation to a specific block ─────────
+    // Record the exact block number we simulate against. The
+    // AegisVault.sol contract enforces temporal physics:
+    //   require(block.number <= simulatedBlock + MAX_BLOCK_DRIFT)
+    // If a reorg or sequencer lag pushes execution into a different
+    // reality, the EVM natively rejects the stale simulation.
+    let simulated_block = fetch_block_number(&config.upstream_rpc_url).await
+        .unwrap_or(0);
+    info!(simulated_block = simulated_block, "GOD-TIER 3: Simulation pinned to block");
+
     // ── Step 1: Fetch account state from upstream RPC ──────────
     let sender_balance = fetch_balance(&config.upstream_rpc_url, from).await
         .unwrap_or(U256::from(0));
@@ -132,6 +142,7 @@ pub async fn simulate_transaction(
                  Possible flashloan gas bomb — transaction rejected.",
                 sim_elapsed_ms, SIMULATION_TIMEOUT_MS
             )),
+            simulated_block,
         });
     }
 
@@ -180,6 +191,7 @@ pub async fn simulate_transaction(
                 approval_changes,
                 loss_pct,
                 error,
+                simulated_block,
             };
 
             info!(
@@ -201,6 +213,7 @@ pub async fn simulate_transaction(
                 approval_changes: vec![],
                 loss_pct: 0.0,
                 error: Some(format!("EVM error: {}", e)),
+                simulated_block,
             })
         }
     }
@@ -233,6 +246,36 @@ async fn fetch_balance(rpc_url: &str, address: &str) -> Result<U256> {
 
     let balance = U256::from_str_radix(hex_str, 16).unwrap_or(U256::ZERO);
     Ok(balance)
+}
+
+/// GOD-TIER 3: Fetch the current block number from the upstream RPC.
+/// Used to pin simulations to a specific block for temporal physics enforcement.
+async fn fetch_block_number(rpc_url: &str) -> Result<u64> {
+    let client = reqwest::Client::new();
+    let payload = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "eth_blockNumber",
+        "params": [],
+        "id": 1
+    });
+
+    let resp = client
+        .post(rpc_url)
+        .json(&payload)
+        .send()
+        .await
+        .context("Failed to fetch block number")?;
+
+    let body: serde_json::Value = resp.json().await
+        .context("Failed to parse block number response")?;
+
+    let hex_str = body["result"]
+        .as_str()
+        .unwrap_or("0x0")
+        .trim_start_matches("0x");
+
+    let block = u64::from_str_radix(hex_str, 16).unwrap_or(0);
+    Ok(block)
 }
 
 /// Detect ERC-20 Approval events in execution logs.

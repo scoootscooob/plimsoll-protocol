@@ -27,6 +27,145 @@ const SEND_METHODS: &[&str] = &[
     "eth_sendRawTransaction",
 ];
 
+/// GOD-TIER 1: EIP-712 Silent Dagger Defense
+/// Cryptographic signing endpoints that MUST be intercepted.
+/// These are NOT transactions — they are off-chain signatures that can
+/// authorize token approvals (Permit2), gasless swaps (CowSwap/UniswapX),
+/// and governance votes WITHOUT ever touching the EVM simulator.
+///
+/// Attack: Prompt-inject agent → "sign this login message" → actually a
+/// Permit2 approval for MAX_UINT → attacker extracts signature → drains vault.
+const SIGN_METHODS: &[&str] = &[
+    "eth_sign",
+    "personal_sign",
+    "eth_signTypedData",
+    "eth_signTypedData_v3",
+    "eth_signTypedData_v4",
+];
+
+/// GOD-TIER 1: Known dangerous EIP-712 type hashes.
+/// These are keccak256 of the EIP-712 type strings used by major protocols.
+/// When we detect these in a signTypedData request, we translate the
+/// off-chain signature into its on-chain equivalent for simulation.
+mod permit_decoder {
+    /// Permit2 PermitSingle type
+    pub const PERMIT2_SINGLE_TYPEHASH: &str =
+        "PermitSingle(PermitDetails details,address spender,uint256 sigDeadline)";
+    /// Permit2 PermitBatch type
+    pub const PERMIT2_BATCH_TYPEHASH: &str =
+        "PermitBatch(PermitDetails[] details,address spender,uint256 sigDeadline)";
+    /// ERC-2612 Permit type
+    pub const ERC2612_PERMIT_TYPEHASH: &str =
+        "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)";
+    /// DAI-style Permit type
+    pub const DAI_PERMIT_TYPEHASH: &str =
+        "Permit(address holder,address spender,uint256 nonce,uint256 expiry,bool allowed)";
+
+    /// Known EIP-712 primary types that authorize token movement.
+    pub const DANGEROUS_PRIMARY_TYPES: &[&str] = &[
+        "Permit",
+        "PermitSingle",
+        "PermitBatch",
+        "PermitTransferFrom",
+        "PermitWitnessTransferFrom",
+        "Order",              // CowSwap
+        "OrderComponents",    // Seaport (OpenSea)
+        "MetaTransaction",    // Biconomy
+        "ForwardRequest",     // OpenZeppelin Defender
+        "Delegation",         // EIP-7702
+    ];
+
+    /// Analyze an EIP-712 typed data payload and classify the risk.
+    ///
+    /// Returns (is_dangerous, synthetic_action, risk_description).
+    /// If dangerous, `synthetic_action` describes the equivalent on-chain
+    /// effect (e.g., "approve(0xHacker, MAX_UINT)").
+    pub fn analyze_typed_data(
+        typed_data: &serde_json::Value,
+    ) -> (bool, String, String) {
+        // Extract primaryType from the EIP-712 payload
+        let primary_type = typed_data
+            .get("primaryType")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        // Check if primaryType is in the dangerous list
+        let is_dangerous_type = DANGEROUS_PRIMARY_TYPES
+            .iter()
+            .any(|dt| primary_type.eq_ignore_ascii_case(dt));
+
+        if !is_dangerous_type {
+            return (false, String::new(), String::new());
+        }
+
+        // Extract the message body for deeper analysis
+        let message = typed_data.get("message").cloned()
+            .unwrap_or(serde_json::json!({}));
+
+        // Extract spender/operator — the address that gains power
+        let spender = message.get("spender")
+            .or_else(|| message.get("operator"))
+            .or_else(|| message.get("taker"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+
+        // Extract value/amount — what's being authorized
+        let value = message.get("value")
+            .or_else(|| message.get("amount"))
+            .and_then(|v| v.as_str().or_else(|| v.as_u64().map(|_| "").or(Some(""))))
+            .unwrap_or("unknown");
+
+        // Extract token address from domain or details
+        let token = typed_data.get("domain")
+            .and_then(|d| d.get("verifyingContract"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+
+        let synthetic_action = match primary_type {
+            "Permit" | "PermitSingle" => {
+                format!(
+                    "ERC20.approve({}, {}) on token {}",
+                    spender, value, token
+                )
+            }
+            "PermitBatch" => {
+                format!(
+                    "BATCH ERC20.approve({}, MULTIPLE_TOKENS)",
+                    spender
+                )
+            }
+            "PermitTransferFrom" | "PermitWitnessTransferFrom" => {
+                format!(
+                    "Permit2.transferFrom(agent, {}, {}) on token {}",
+                    spender, value, token
+                )
+            }
+            "Order" | "OrderComponents" => {
+                format!(
+                    "DEX Order: {} gains trading rights via signed order",
+                    spender
+                )
+            }
+            _ => {
+                format!(
+                    "DANGEROUS SIGNATURE: {} authorizes {} on {}",
+                    primary_type, spender, token
+                )
+            }
+        };
+
+        let risk_description = format!(
+            "GOD-TIER 1 (EIP-712 Silent Dagger): Agent asked to sign '{}' — \
+             this is NOT a login message. It is a cryptographic authorization \
+             that translates to: {}. An attacker can extract this signature \
+             and submit it on-chain to drain the vault.",
+            primary_type, synthetic_action
+        );
+
+        (true, synthetic_action, risk_description)
+    }
+}
+
 // ── Patch 4: Synthetic receipt store ─────────────────────────────
 // Blocked transactions get synthetic hashes. When the agent polls
 // eth_getTransactionReceipt, we return a synthetic reverted receipt
@@ -166,6 +305,83 @@ pub async fn handle_rpc(
         }
     }
 
+    // ── GOD-TIER 1: EIP-712 Silent Dagger Interception ─────────
+    // Intercept ALL cryptographic signing endpoints. The agent should
+    // NEVER blindly sign off-chain messages — they can be weaponized
+    // as Permit2 approvals, gasless swap orders, or governance votes.
+    if SIGN_METHODS.contains(&req.method.as_str()) {
+        warn!(
+            method = %req.method,
+            "GOD-TIER 1: Intercepted off-chain signing request"
+        );
+
+        // For signTypedData variants, decode the EIP-712 payload
+        if req.method.starts_with("eth_signTypedData") {
+            // The typed data is typically the 2nd param (after the address)
+            let typed_data = req.params.as_array()
+                .and_then(|a| a.get(1))
+                .cloned()
+                .unwrap_or(serde_json::json!({}));
+
+            // Parse if it's a JSON string
+            let parsed_data = if let Some(s) = typed_data.as_str() {
+                serde_json::from_str(s).unwrap_or(typed_data)
+            } else {
+                typed_data
+            };
+
+            let (is_dangerous, synthetic_action, risk_desc) =
+                permit_decoder::analyze_typed_data(&parsed_data);
+
+            if is_dangerous {
+                warn!(
+                    synthetic_action = %synthetic_action,
+                    "GOD-TIER 1: DANGEROUS EIP-712 SIGNATURE BLOCKED"
+                );
+
+                // Extract IOC — this is an active phishing attack
+                let from = req.params.as_array()
+                    .and_then(|a| a.first())
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown");
+
+                let ioc = telemetry::extract_ioc(
+                    from, "eip712_permit", &[], "permit_decoder",
+                    &risk_desc, None, 1,
+                );
+                telemetry::uplink_ioc(&ioc, "https://cloud.aegis.network/v1/ioc").await;
+
+                let (resp, tx_hash) = JsonRpcResponse::aegis_synthetic_send(
+                    req.id, &risk_desc,
+                );
+                if let Ok(mut store) = BLOCKED_TX_STORE.lock() {
+                    store.insert(tx_hash, risk_desc);
+                }
+                return resp;
+            }
+        }
+
+        // For eth_sign and personal_sign — block ALL by default.
+        // Raw message signing is ALWAYS dangerous for an AI agent.
+        // A human can sign arbitrary messages; an AI agent cannot
+        // distinguish a "login challenge" from a "drain everything" payload.
+        if req.method == "eth_sign" || req.method == "personal_sign" {
+            let reason = format!(
+                "GOD-TIER 1: Raw message signing ({}) blocked. \
+                 AI agents must NEVER sign arbitrary messages — \
+                 they cannot distinguish login challenges from \
+                 cryptographic drain authorizations.",
+                req.method
+            );
+            warn!("{}", reason);
+            let (resp, tx_hash) = JsonRpcResponse::aegis_synthetic_send(req.id, &reason);
+            if let Ok(mut store) = BLOCKED_TX_STORE.lock() {
+                store.insert(tx_hash, reason);
+            }
+            return resp;
+        }
+    }
+
     // ── Read-only methods: pass through to upstream ─────────────
     if !SEND_METHODS.contains(&req.method.as_str()) {
         return proxy_to_upstream(config, &req).await;
@@ -253,16 +469,16 @@ pub async fn handle_rpc(
         return resp;
     }
 
-    // ── Patch 2: State-Delta Invariant Capture ───────────────────
-    // The "Volkswagen" defense: we record what the simulation EXPECTS
-    // the post-execution state to look like. Downstream tooling (or
-    // an on-chain wrapper) can assert these invariants.
+    // ── Patch 2 + GOD-TIER 3: State-Delta + Block Pinning ───────
+    // We record BOTH what the simulation expects AND which block it
+    // simulated against. The on-chain vault rejects stale simulations.
     info!(
         sim_balance_before = sim_result.balance_before,
         sim_balance_after = sim_result.balance_after,
         sim_loss_pct = sim_result.loss_pct,
         sim_gas_used = sim_result.gas_used,
-        "State-delta invariant captured from simulation"
+        sim_block = sim_result.simulated_block,
+        "State-delta invariant captured (pinned to block)"
     );
 
     // Calculate and log fee

@@ -321,3 +321,48 @@ class ThreatFeedEngine:
             f"IOC accepted with stake weight {stake_weight:.4f} "
             f"(TVL ${vault_tvl_usd:,.0f})"
         ))
+
+    # ── GOD-TIER 2: Flashloan Sybil Defense (TWAB) ────────────
+
+    # Minimum vault age in blocks before IOC submission is accepted.
+    TWAB_WINDOW_BLOCKS: int = 20_000  # ~72 hours at 12s/block
+
+    def validate_ioc_with_twab(
+        self,
+        twab_usd: float,
+        vault_age_blocks: int,
+    ) -> tuple:
+        """Validate an IOC submission using Time-Weighted Average Balance.
+
+        Unlike ``validate_ioc_submission()`` which uses a point-in-time TVL
+        snapshot (fakeable via flash loans), TWAB requires the vault to have
+        maintained the minimum balance for 72 hours (20,000 blocks).
+
+        A $50M flash loan split into 10,000 vaults at $5K each contributes
+        only $5K / 20,000 = $0.25 TWAB per vault. Attack cost: impossible.
+
+        Returns (accepted: bool, reason: str).
+        """
+        min_tvl = self.config.min_tvl_for_submission
+
+        # Check vault age first — new vaults can't vote
+        if vault_age_blocks < self.TWAB_WINDOW_BLOCKS:
+            return (False, (
+                f"GOD-TIER 2: IOC rejected — vault age {vault_age_blocks} blocks "
+                f"< minimum {self.TWAB_WINDOW_BLOCKS} blocks (~72h). "
+                f"New vaults cannot influence Swarm consensus."
+            ))
+
+        # Check TWAB meets threshold
+        if twab_usd < min_tvl:
+            return (False, (
+                f"GOD-TIER 2: IOC rejected — TWAB ${twab_usd:,.0f} "
+                f"< minimum ${min_tvl:,.0f}. Flash-loan Sybil defense: "
+                f"72-hour average balance required, not point-in-time snapshot."
+            ))
+
+        stake_weight = self.compute_stake_weight(twab_usd)
+        return (True, (
+            f"IOC accepted via TWAB validation: ${twab_usd:,.0f} avg over "
+            f"{vault_age_blocks} blocks (stake weight {stake_weight:.4f})"
+        ))

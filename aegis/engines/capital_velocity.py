@@ -42,6 +42,12 @@ class SpendRecord(NamedTuple):
     amount: float
 
 
+class GasCostRecord(NamedTuple):
+    timestamp: float
+    gas_cost: float
+    value_moved: float
+
+
 @dataclass
 class CapitalVelocityConfig:
     """Tunable parameters for the PID velocity controller."""
@@ -61,6 +67,13 @@ class CapitalVelocityConfig:
     jitter_rotation_seconds: float = 3600.0  # Nonce rotation interval
     dead_man_switch: bool = False          # Lock engine after jitter catch
 
+    # ── GOD-TIER 4: Gas-to-Value Ratio Caps (Paymaster Parasite Defense) ──
+    gtv_enabled: bool = False             # Enable GTV ratio enforcement
+    gtv_max_ratio: float = 5.0            # Max gas_cost / capital_moved ratio
+    gtv_min_value: float = 0.0            # Minimum tx value below which GTV applies
+    gtv_window_seconds: float = 300.0     # Window for cumulative GTV tracking
+    gtv_cumulative_max: float = 10.0      # Max cumulative gas / cumulative value ratio
+
 
 @dataclass
 class CapitalVelocityEngine:
@@ -76,6 +89,10 @@ class CapitalVelocityEngine:
     # Jitter state
     _jitter_nonce: bytes = field(default=b"", init=False, repr=False)
     _dead_man_locked: bool = field(default=False, init=False, repr=False)
+    # GTV state (God-Tier 4)
+    _gtv_records: deque = field(default_factory=deque, init=False, repr=False)
+    _gtv_total_gas: float = field(default=0.0, init=False, repr=False)
+    _gtv_total_value: float = field(default=0.0, init=False, repr=False)
 
     def __post_init__(self) -> None:
         self._jitter_nonce = os.urandom(32)
@@ -96,6 +113,92 @@ class CapitalVelocityEngine:
         if elapsed <= 0:
             return 0.0
         return self._total_spent / elapsed
+
+    # ── GOD-TIER 4: Gas-to-Value Ratio (GTV) ────────────────────
+
+    def _prune_gtv(self, now: float) -> None:
+        """Prune GTV records outside the observation window."""
+        cutoff = now - self.config.gtv_window_seconds
+        while self._gtv_records and self._gtv_records[0].timestamp < cutoff:
+            old = self._gtv_records.popleft()
+            self._gtv_total_gas -= old.gas_cost
+            self._gtv_total_value -= old.value_moved
+
+    def check_gtv(self, gas_cost: float, value_moved: float) -> Verdict | None:
+        """Check Gas-to-Value ratio. Returns a blocking Verdict or None if OK.
+
+        GOD-TIER 4: The Paymaster Parasite exploits the gap between gas costs
+        and capital value. An attacker makes the agent execute infinite $1 swaps
+        costing $15 gas each — each swap is "safe" by capital metrics, but the
+        agent hemorrhages gas fees.
+
+        Per-tx GTV: gas_cost / max(value_moved, epsilon)
+        Cumulative GTV: sum(gas) / sum(value) over window
+
+        If either exceeds the threshold → BLOCK_GAS_VALUE_RATIO.
+        """
+        if not self.config.gtv_enabled:
+            return None
+
+        now = time.monotonic()
+        self._prune_gtv(now)
+
+        # Epsilon to avoid division by zero
+        eps = 1e-18
+
+        # Per-transaction GTV check
+        per_tx_ratio = gas_cost / max(value_moved, eps)
+        if per_tx_ratio > self.config.gtv_max_ratio:
+            return Verdict(
+                code=VerdictCode.BLOCK_GAS_VALUE_RATIO,
+                reason=(
+                    f"GOD-TIER 4 (PAYMASTER PARASITE): Per-tx GTV ratio "
+                    f"{per_tx_ratio:.1f}x > max {self.config.gtv_max_ratio:.1f}x. "
+                    f"Gas ${gas_cost:.2f} for ${value_moved:.2f} value — "
+                    f"Irrational Economic Sabotage detected"
+                ),
+                engine=_ENGINE_NAME,
+                metadata={
+                    "per_tx_gtv": round(per_tx_ratio, 4),
+                    "gas_cost": gas_cost,
+                    "value_moved": value_moved,
+                    "max_ratio": self.config.gtv_max_ratio,
+                },
+            )
+
+        # Record this transaction's gas/value
+        self._gtv_records.append(GasCostRecord(
+            timestamp=now, gas_cost=gas_cost, value_moved=value_moved,
+        ))
+        self._gtv_total_gas += gas_cost
+        self._gtv_total_value += value_moved
+
+        # Cumulative GTV check over window
+        cumulative_ratio = self._gtv_total_gas / max(self._gtv_total_value, eps)
+        if cumulative_ratio > self.config.gtv_cumulative_max:
+            # Rollback this record
+            self._gtv_records.pop()
+            self._gtv_total_gas -= gas_cost
+            self._gtv_total_value -= value_moved
+            return Verdict(
+                code=VerdictCode.BLOCK_GAS_VALUE_RATIO,
+                reason=(
+                    f"GOD-TIER 4 (PAYMASTER PARASITE): Cumulative GTV ratio "
+                    f"{cumulative_ratio:.1f}x > max {self.config.gtv_cumulative_max:.1f}x "
+                    f"over {self.config.gtv_window_seconds:.0f}s window. "
+                    f"Systematic gas drain detected"
+                ),
+                engine=_ENGINE_NAME,
+                metadata={
+                    "cumulative_gtv": round(cumulative_ratio, 4),
+                    "total_gas": round(self._gtv_total_gas, 4),
+                    "total_value": round(self._gtv_total_value, 4),
+                    "window_records": len(self._gtv_records),
+                    "max_cumulative": self.config.gtv_cumulative_max,
+                },
+            )
+
+        return None
 
     # ── Jitter computation ───────────────────────────────────────
 
@@ -282,3 +385,7 @@ class CapitalVelocityEngine:
         self._integral = 0.0
         self._dead_man_locked = False
         self._jitter_nonce = os.urandom(32)
+        # GTV state (God-Tier 4)
+        self._gtv_records.clear()
+        self._gtv_total_gas = 0.0
+        self._gtv_total_value = 0.0

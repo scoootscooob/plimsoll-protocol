@@ -228,6 +228,94 @@ class KeyVault:
             # can at least remove the local binding)
             hex_key = "0" * len(hex_key)  # noqa: F841
 
+    # ── GOD-TIER 1: EIP-712 Silent Dagger Defense ──────────────
+
+    # Known dangerous EIP-712 primary types that authorize token movement.
+    _DANGEROUS_PRIMARY_TYPES = frozenset({
+        "Permit", "PermitSingle", "PermitBatch",
+        "PermitTransferFrom", "PermitWitnessTransferFrom",
+        "Order", "OrderComponents",  # CowSwap, Seaport
+        "MetaTransaction", "ForwardRequest", "Delegation",
+    })
+
+    def sign_typed_data(
+        self,
+        key_id: str,
+        typed_data: dict[str, Any],
+    ) -> str:
+        """Sign EIP-712 typed data with GOD-TIER 1 protection.
+
+        Before signing, the vault analyzes the EIP-712 payload to detect
+        dangerous signature types (Permit2, gasless swaps, etc.). If the
+        payload would authorize token movement, the vault runs the
+        equivalent on-chain action through the firewall.
+
+        Raises
+        ------
+        AegisEnforcementError
+            If the typed data would authorize a dangerous action.
+        """
+        primary_type = typed_data.get("primaryType", "")
+
+        if primary_type in self._DANGEROUS_PRIMARY_TYPES:
+            message = typed_data.get("message", {})
+            spender = (
+                message.get("spender")
+                or message.get("operator")
+                or message.get("taker")
+                or "unknown"
+            )
+            value = message.get("value", message.get("amount", "MAX"))
+            domain = typed_data.get("domain", {})
+            token = domain.get("verifyingContract", "unknown")
+
+            synthetic_action = (
+                f"EIP-712 {primary_type}: {spender} gains approval "
+                f"for {value} on token {token}"
+            )
+
+            # If firewall is bound, evaluate the synthetic on-chain action
+            if self._firewall is not None:
+                payload = {
+                    "target": str(spender),
+                    "amount": float(value) if str(value).isdigit() else float("inf"),
+                    "data": f"0x095ea7b3{spender}",  # approve() selector
+                    "eip712_primary_type": primary_type,
+                    "eip712_synthetic": True,
+                }
+                verdict = self._firewall.evaluate(
+                    payload,
+                    spend_amount=float(value) if str(value).isdigit() else float("inf"),
+                )
+                if verdict.blocked:
+                    raise AegisEnforcementError(
+                        reason=(
+                            f"GOD-TIER 1 (Silent Dagger): {synthetic_action}. "
+                            f"Firewall blocked: {verdict.reason}"
+                        ),
+                        engine="PermitDecoder",
+                        code=verdict.code.value,
+                    )
+
+            # Even without firewall, block MAX_UINT approvals
+            if str(value) in (
+                "115792089237316195423570985008687907853269984665640564039457584007913129639935",
+                "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+            ):
+                raise AegisEnforcementError(
+                    reason=(
+                        f"GOD-TIER 1 (Silent Dagger): MAX_UINT approval "
+                        f"to {spender} on {token}. This grants unlimited "
+                        f"withdrawal rights — categorically rejected."
+                    ),
+                    engine="PermitDecoder",
+                    code="BLOCK_EIP712_PERMIT",
+                )
+
+        # Safe to sign — proceed with HMAC signing
+        canonical = json.dumps(typed_data, sort_keys=True, separators=(",", ":"))
+        return self.sign(key_id, canonical.encode())
+
     def has_key(self, key_id: str) -> bool:
         return key_id in self._secrets
 

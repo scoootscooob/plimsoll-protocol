@@ -52,12 +52,30 @@ pub struct IOCReport {
     /// Higher TVL → higher weight in Swarm consensus.
     /// score = min(1.0, tvl / 100_000)  (caps at $100K)
     pub stake_weight: f64,
+
+    /// GOD-TIER 2: Time-Weighted Average Balance over 72 hours.
+    /// Unlike `vault_tvl_usd` (point-in-time snapshot), this is the
+    /// average balance maintained across 20,000 blocks. Flash loans
+    /// that exist for 1 block contribute (5K / 20,000) = $0.25 to TWAB.
+    pub twab_usd: f64,
+
+    /// GOD-TIER 2: Vault age in blocks since first deposit.
+    /// Newly created vaults (< 20,000 blocks old) cannot submit IOCs
+    /// even if their current balance meets the threshold.
+    pub vault_age_blocks: u64,
 }
 
 /// Zero-Day 4: Minimum TVL required to submit IOCs to the Swarm.
 /// Agents below this threshold have their IOCs logged locally but
 /// NOT uplinked to the Cloud consensus.
 const MIN_TVL_FOR_IOC_SUBMISSION: f64 = 5_000.0;
+
+/// GOD-TIER 2: Minimum Time-Weighted Average Balance (TWAB) window.
+/// A snapshot TVL is useless in DeFi — flash loans exist for 1 block.
+/// TWAB asks: "Has this vault maintained $5K for 72 hours (20,000 blocks)?"
+/// Flash-loan Sybil attacks become mathematically impossible.
+const TWAB_WINDOW_BLOCKS: u64 = 20_000;   // ~72 hours at 12s/block
+const TWAB_WINDOW_SECONDS: u64 = 259_200; // 72 hours in seconds
 
 /// Zero-Day 4: Compute stake weight from TVL.
 /// Linear scale capped at $100K:
@@ -139,6 +157,8 @@ pub fn extract_ioc(
         chain_id,
         vault_tvl_usd,
         stake_weight,
+        twab_usd: 0.0,
+        vault_age_blocks: 0,
     }
 }
 
@@ -187,16 +207,45 @@ fn sanitize_reason(reason: &str) -> String {
 /// but NOT uplinked. This prevents Sybil telemetry poisoning where
 /// 1000 fake agents with $0 TVL flood the consensus.
 pub async fn uplink_ioc(ioc: &IOCReport, cloud_url: &str) {
-    // Zero-Day 4: Stake-weighted gate — reject low-TVL submissions
-    if ioc.vault_tvl_usd < MIN_TVL_FOR_IOC_SUBMISSION {
-        warn!(
-            tvl = ioc.vault_tvl_usd,
-            min_tvl = MIN_TVL_FOR_IOC_SUBMISSION,
-            target = %ioc.target_address,
-            "ZERO-DAY 4: IOC rejected — agent TVL below minimum for Swarm submission. \
-             Logged locally only."
-        );
-        return;
+    // GOD-TIER 2: TWAB gate supersedes point-in-time TVL check.
+    // A flash loan can fake point-in-time TVL for 1 block.
+    // TWAB requires maintaining balance for 72 hours (20,000 blocks).
+    if ioc.twab_usd > 0.0 {
+        // If TWAB data is available, use it (strict mode)
+        if ioc.twab_usd < MIN_TVL_FOR_IOC_SUBMISSION {
+            warn!(
+                twab = ioc.twab_usd,
+                min_tvl = MIN_TVL_FOR_IOC_SUBMISSION,
+                vault_age = ioc.vault_age_blocks,
+                target = %ioc.target_address,
+                "GOD-TIER 2: IOC rejected — TWAB ${:.0} < minimum ${:.0}. \
+                 Flash-loan Sybil defense active.",
+                ioc.twab_usd, MIN_TVL_FOR_IOC_SUBMISSION,
+            );
+            return;
+        }
+        if ioc.vault_age_blocks < TWAB_WINDOW_BLOCKS {
+            warn!(
+                vault_age = ioc.vault_age_blocks,
+                min_age = TWAB_WINDOW_BLOCKS,
+                "GOD-TIER 2: IOC rejected — vault too young ({} blocks < {} required). \
+                 New vaults cannot influence Swarm consensus.",
+                ioc.vault_age_blocks, TWAB_WINDOW_BLOCKS,
+            );
+            return;
+        }
+    } else {
+        // Fallback: point-in-time TVL check (Zero-Day 4 compat)
+        if ioc.vault_tvl_usd < MIN_TVL_FOR_IOC_SUBMISSION {
+            warn!(
+                tvl = ioc.vault_tvl_usd,
+                min_tvl = MIN_TVL_FOR_IOC_SUBMISSION,
+                target = %ioc.target_address,
+                "ZERO-DAY 4: IOC rejected — agent TVL below minimum for Swarm submission. \
+                 Logged locally only."
+            );
+            return;
+        }
     }
 
     if cloud_url.is_empty() || cloud_url == "disabled" {

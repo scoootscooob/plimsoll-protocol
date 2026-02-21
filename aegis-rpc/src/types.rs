@@ -37,6 +37,11 @@ pub struct SimulationResult {
     pub approval_changes: Vec<String>,
     pub loss_pct: f64,
     pub error: Option<String>,
+    /// GOD-TIER 3: Block number the simulation was executed against.
+    /// The AegisVault.sol contract enforces: block.number <= simulated_block + 3.
+    /// If a reorg or sequencer lag pushes execution beyond this window,
+    /// the EVM natively rejects the stale simulation.
+    pub simulated_block: u64,
 }
 
 impl JsonRpcResponse {
