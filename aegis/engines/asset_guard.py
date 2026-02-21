@@ -20,6 +20,7 @@ Time complexity: O(1) + oracle latency.
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
@@ -46,6 +47,11 @@ class AssetGuardConfig:
     max_slippage_bps: int = 300                # 3% max slippage (basis points)
     allowed_assets: list[str] = field(default_factory=list)  # Empty = allow all
     oracle_provider: Optional[Callable[[str], OracleResult]] = None
+
+    # Zero-Day 3: Signed Intent Time-Decay
+    # Maximum age (seconds) of a swap intent before it's considered stale.
+    # Default: 24 seconds (2 Ethereum block slots).
+    max_intent_age_secs: float = 24.0
 
 
 @dataclass
@@ -74,6 +80,61 @@ class AssetGuardEngine:
                 reason="No swap fields in payload — passthrough",
                 engine=_ENGINE_NAME,
             )
+
+        # ── Check 0 (Zero-Day 3): Intent Time-Decay ─────────────
+        # If the payload carries a `deadline` or `intent_timestamp`,
+        # reject stale intents that could be exploited by MEV builders
+        # holding the transaction until slippage favors them.
+        intent_deadline = payload.get("deadline")
+        intent_timestamp = payload.get("intent_timestamp")
+        now = time.time()
+
+        if intent_deadline is not None:
+            if float(intent_deadline) < now:
+                return Verdict(
+                    code=VerdictCode.BLOCK_ASSET_REJECTED,
+                    reason=(
+                        f"INTENT EXPIRED: deadline {intent_deadline} is in the "
+                        f"past (now={now:.0f}). Stale intents rejected to "
+                        f"prevent MEV time-decay exploitation."
+                    ),
+                    engine=_ENGINE_NAME,
+                    metadata={"deadline": intent_deadline, "now": now},
+                )
+            # Deadline too far in the future → potential builder exploit
+            max_future = now + self.config.max_intent_age_secs
+            if float(intent_deadline) > max_future:
+                return Verdict(
+                    code=VerdictCode.BLOCK_ASSET_REJECTED,
+                    reason=(
+                        f"INTENT DEADLINE TOO FAR: deadline {intent_deadline} is "
+                        f"{float(intent_deadline) - now:.0f}s in the future "
+                        f"(max {self.config.max_intent_age_secs:.0f}s). "
+                        f"Ultra-short deadlines prevent MEV time-decay."
+                    ),
+                    engine=_ENGINE_NAME,
+                    metadata={
+                        "deadline": intent_deadline,
+                        "max_intent_age_secs": self.config.max_intent_age_secs,
+                    },
+                )
+
+        if intent_timestamp is not None:
+            age = now - float(intent_timestamp)
+            if age > self.config.max_intent_age_secs:
+                return Verdict(
+                    code=VerdictCode.BLOCK_ASSET_REJECTED,
+                    reason=(
+                        f"STALE INTENT: signed {age:.0f}s ago "
+                        f"(max {self.config.max_intent_age_secs:.0f}s). "
+                        f"Re-sign with a fresh timestamp."
+                    ),
+                    engine=_ENGINE_NAME,
+                    metadata={
+                        "intent_age_secs": age,
+                        "max_intent_age_secs": self.config.max_intent_age_secs,
+                    },
+                )
 
         # ── Check 1: Allow-list ──────────────────────────────────
         if token_address and self.config.allowed_assets:

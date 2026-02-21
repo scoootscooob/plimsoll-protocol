@@ -41,6 +41,36 @@ pub struct IOCReport {
     pub timestamp: u64,
     /// Chain ID
     pub chain_id: u64,
+
+    /// Zero-Day 4: Agent's vault TVL in USD at time of report.
+    /// IOCs from agents with TVL < $5,000 are REJECTED by the Cloud
+    /// to prevent Sybil telemetry poisoning. 1000 fake agents with $0
+    /// TVL cannot overwhelm the consensus.
+    pub vault_tvl_usd: f64,
+
+    /// Zero-Day 4: Stake-weighted confidence score.
+    /// Higher TVL → higher weight in Swarm consensus.
+    /// score = min(1.0, tvl / 100_000)  (caps at $100K)
+    pub stake_weight: f64,
+}
+
+/// Zero-Day 4: Minimum TVL required to submit IOCs to the Swarm.
+/// Agents below this threshold have their IOCs logged locally but
+/// NOT uplinked to the Cloud consensus.
+const MIN_TVL_FOR_IOC_SUBMISSION: f64 = 5_000.0;
+
+/// Zero-Day 4: Compute stake weight from TVL.
+/// Linear scale capped at $100K:
+///   $0      → 0.0 (rejected)
+///   $5,000  → 0.05 (minimum accepted)
+///   $50,000 → 0.5
+///   $100K+  → 1.0 (maximum weight)
+pub fn compute_stake_weight(tvl_usd: f64) -> f64 {
+    if tvl_usd <= 0.0 {
+        return 0.0;
+    }
+    let weight = tvl_usd / 100_000.0;
+    if weight > 1.0 { 1.0 } else { weight }
 }
 
 /// Extract IOCs from a blocked transaction.
@@ -48,6 +78,9 @@ pub struct IOCReport {
 /// This function is called ONLY when a transaction is blocked.
 /// It strips all PII (amounts, balances, positions) and extracts
 /// only the attacker's fingerprint.
+///
+/// Zero-Day 4: Now accepts optional `vault_tvl_usd` parameter.
+/// If provided, computes stake weight for Sybil resistance.
 pub fn extract_ioc(
     from: &str,
     to: &str,
@@ -57,6 +90,10 @@ pub fn extract_ioc(
     sim_revert: Option<&str>,
     chain_id: u64,
 ) -> IOCReport {
+    // Zero-Day 4: Default TVL of 0 — caller should set this
+    // from the vault's actual balance.
+    let vault_tvl_usd = 0.0; // Set by caller via set_tvl()
+    let stake_weight = compute_stake_weight(vault_tvl_usd);
     // Anonymize the agent address — hash it, never send raw
     let agent_id = {
         let mut h: u64 = 0x517cc1b727220a95;
@@ -100,7 +137,26 @@ pub fn extract_ioc(
             .unwrap_or_default()
             .as_secs(),
         chain_id,
+        vault_tvl_usd,
+        stake_weight,
     }
+}
+
+/// Zero-Day 4: Create an IOC with explicit TVL for stake-weighted submission.
+pub fn extract_ioc_with_tvl(
+    from: &str,
+    to: &str,
+    data: &[u8],
+    block_engine: &str,
+    block_reason: &str,
+    sim_revert: Option<&str>,
+    chain_id: u64,
+    vault_tvl_usd: f64,
+) -> IOCReport {
+    let mut ioc = extract_ioc(from, to, data, block_engine, block_reason, sim_revert, chain_id);
+    ioc.vault_tvl_usd = vault_tvl_usd;
+    ioc.stake_weight = compute_stake_weight(vault_tvl_usd);
+    ioc
 }
 
 /// Remove numeric values from reason strings to avoid leaking trade amounts.
@@ -126,16 +182,39 @@ fn sanitize_reason(reason: &str) -> String {
 ///
 /// In production, this sends to `https://api.aegis.network/v1/ioc`.
 /// For now, it logs locally. The uplink is fire-and-forget (async, non-blocking).
+///
+/// Zero-Day 4: IOCs from agents with TVL below $5,000 are logged locally
+/// but NOT uplinked. This prevents Sybil telemetry poisoning where
+/// 1000 fake agents with $0 TVL flood the consensus.
 pub async fn uplink_ioc(ioc: &IOCReport, cloud_url: &str) {
+    // Zero-Day 4: Stake-weighted gate — reject low-TVL submissions
+    if ioc.vault_tvl_usd < MIN_TVL_FOR_IOC_SUBMISSION {
+        warn!(
+            tvl = ioc.vault_tvl_usd,
+            min_tvl = MIN_TVL_FOR_IOC_SUBMISSION,
+            target = %ioc.target_address,
+            "ZERO-DAY 4: IOC rejected — agent TVL below minimum for Swarm submission. \
+             Logged locally only."
+        );
+        return;
+    }
+
     if cloud_url.is_empty() || cloud_url == "disabled" {
         info!(
             target = %ioc.target_address,
             selector = %ioc.calldata_selector,
             engine = %ioc.block_engine,
+            stake_weight = ioc.stake_weight,
             "IOC extracted (uplink disabled, logged locally)"
         );
         return;
     }
+
+    info!(
+        tvl = ioc.vault_tvl_usd,
+        stake_weight = ioc.stake_weight,
+        "Zero-Day 4: IOC passes stake-weight gate"
+    );
 
     let client = reqwest::Client::new();
     match client
@@ -149,7 +228,8 @@ pub async fn uplink_ioc(ioc: &IOCReport, cloud_url: &str) {
             info!(
                 status = resp.status().as_u16(),
                 target = %ioc.target_address,
-                "IOC uplinked to Aegis Cloud"
+                stake_weight = ioc.stake_weight,
+                "IOC uplinked to Aegis Cloud (stake-weighted)"
             );
         }
         Err(e) => {
@@ -187,6 +267,10 @@ mod tests {
         // Amounts redacted from reason
         assert!(ioc.block_reason.contains("[REDACTED]"));
         assert!(!ioc.block_reason.contains("45.2"));
+
+        // Zero-Day 4: Default TVL is 0, stake_weight is 0
+        assert_eq!(ioc.vault_tvl_usd, 0.0);
+        assert_eq!(ioc.stake_weight, 0.0);
     }
 
     #[test]
@@ -206,5 +290,42 @@ mod tests {
         let ioc = extract_ioc("0xA", "0xB", &[], "entropy", "secret detected", None, 11155111);
         assert_eq!(ioc.calldata_selector, "0x");
         assert_eq!(ioc.chain_id, 11155111);
+    }
+
+    #[test]
+    fn test_stake_weight_computation() {
+        // $0 TVL → 0.0 weight
+        assert_eq!(compute_stake_weight(0.0), 0.0);
+        // Negative TVL → 0.0 weight
+        assert_eq!(compute_stake_weight(-1000.0), 0.0);
+        // $5K TVL → 0.05 weight
+        assert!((compute_stake_weight(5_000.0) - 0.05).abs() < 0.001);
+        // $50K TVL → 0.5 weight
+        assert!((compute_stake_weight(50_000.0) - 0.5).abs() < 0.001);
+        // $100K TVL → 1.0 weight (capped)
+        assert_eq!(compute_stake_weight(100_000.0), 1.0);
+        // $1M TVL → still 1.0 (capped)
+        assert_eq!(compute_stake_weight(1_000_000.0), 1.0);
+    }
+
+    #[test]
+    fn test_extract_ioc_with_tvl() {
+        let ioc = extract_ioc_with_tvl(
+            "0xAgent",
+            "0xHacker",
+            &[0xde, 0xad, 0xbe, 0xef],
+            "bloom",
+            "blacklisted address",
+            None,
+            1,
+            50_000.0,
+        );
+        assert_eq!(ioc.vault_tvl_usd, 50_000.0);
+        assert!((ioc.stake_weight - 0.5).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_min_tvl_constant() {
+        assert_eq!(MIN_TVL_FOR_IOC_SUBMISSION, 5_000.0);
     }
 }

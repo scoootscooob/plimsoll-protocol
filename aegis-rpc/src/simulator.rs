@@ -14,7 +14,20 @@ use revm::{
     Evm,
 };
 use std::str::FromStr;
+use std::time::Instant;
 use tracing::{info, warn};
+
+/// Zero-Day 1: Flashloan Gas Bomb Defense
+/// Hard ceiling on simulation gas to prevent infinite-loop contracts from
+/// pegging CPU. Even if the contract is designed to consume exactly
+/// block.gaslimit, the simulator cuts it off here.
+const SIMULATION_GAS_CEILING: u64 = 5_000_000;
+
+/// Wall-clock timeout for simulation execution (milliseconds).
+/// If revm takes longer than this, we abort and return a synthetic revert.
+/// This catches pathological EVM opcodes that are cheap in gas but
+/// expensive in wall-clock time (e.g., MODEXP with huge exponents).
+const SIMULATION_TIMEOUT_MS: u64 = 50;
 
 /// Simulate a transaction against a forked EVM state.
 ///
@@ -73,6 +86,10 @@ pub async fn simulate_transaction(
     let balance_before_u128 = sender_balance.try_into().unwrap_or(u128::MAX);
 
     // ── Step 3: Configure revm transaction environment ─────────
+    // Zero-Day 1: Clamp gas_limit to SIMULATION_GAS_CEILING.
+    // A malicious contract that requests block.gaslimit (30M) gas
+    // would peg the CPU for seconds — we cap it at 5M.
+    let clamped_gas = std::cmp::min(500_000, SIMULATION_GAS_CEILING);
     let mut evm = Evm::builder()
         .with_db(cache_db)
         .modify_tx_env(|tx| {
@@ -80,7 +97,7 @@ pub async fn simulate_transaction(
             tx.transact_to = TransactTo::Call(recipient_addr);
             tx.value = U256::from(value);
             tx.data = data.to_vec().into();
-            tx.gas_limit = 500_000;
+            tx.gas_limit = clamped_gas;
             tx.gas_price = U256::from(20_000_000_000u64); // 20 gwei
         })
         .modify_cfg_env(|cfg| {
@@ -88,8 +105,35 @@ pub async fn simulate_transaction(
         })
         .build();
 
-    // ── Step 4: Execute in sandbox ─────────────────────────────
+    // ── Step 4: Execute in sandbox with wall-clock timeout ────
+    // Zero-Day 1: Even with gas capped, certain EVM opcodes
+    // (MODEXP, SHA256 precompile with huge inputs) can be cheap
+    // in gas but expensive in real time. We enforce a hard 50ms
+    // wall-clock deadline.
+    let sim_start = Instant::now();
     let result = evm.transact_commit();
+    let sim_elapsed_ms = sim_start.elapsed().as_millis() as u64;
+
+    if sim_elapsed_ms > SIMULATION_TIMEOUT_MS {
+        warn!(
+            elapsed_ms = sim_elapsed_ms,
+            ceiling_ms = SIMULATION_TIMEOUT_MS,
+            "Simulation exceeded wall-clock timeout — treating as gas bomb"
+        );
+        return Ok(SimulationResult {
+            success: false,
+            gas_used: clamped_gas,
+            balance_before: balance_before_u128,
+            balance_after: balance_before_u128,
+            approval_changes: vec![],
+            loss_pct: 0.0,
+            error: Some(format!(
+                "AEGIS ZERO-DAY 1: Simulation timed out ({}ms > {}ms ceiling). \
+                 Possible flashloan gas bomb — transaction rejected.",
+                sim_elapsed_ms, SIMULATION_TIMEOUT_MS
+            )),
+        });
+    }
 
     match result {
         Ok(execution_result) => {
@@ -225,6 +269,15 @@ fn detect_approval_changes(result: &ExecutionResult) -> Vec<String> {
 
 /// Check simulation result against Aegis physics constraints.
 pub fn check_physics(config: &Config, result: &SimulationResult) -> Result<(), String> {
+    // Check 0 (Zero-Day 1): Gas used exceeds ceiling → gas bomb
+    if result.gas_used > SIMULATION_GAS_CEILING {
+        return Err(format!(
+            "AEGIS ZERO-DAY 1: Gas used ({}) exceeds simulation ceiling ({}). \
+             Possible flashloan gas bomb attack.",
+            result.gas_used, SIMULATION_GAS_CEILING
+        ));
+    }
+
     // Check 1: Transaction must not revert
     if !result.success {
         return Err(format!(

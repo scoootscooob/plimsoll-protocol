@@ -23,6 +23,12 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
 
+/// Zero-Day 3: Maximum bundle deadline (seconds from current block timestamp).
+/// Private builders that hold bundles longer than this can exploit MEV
+/// time-decay. 24 seconds = 2 block slots — if it doesn't land in 2 blocks,
+/// the intent is stale and must be re-signed.
+const DEFAULT_MAX_DEADLINE_SECS: u64 = 24;
+
 /// A Flashbots bundle containing one or more signed transactions.
 #[derive(Debug, Clone, Serialize)]
 pub struct FlashbotsBundle {
@@ -72,11 +78,30 @@ pub async fn submit_bundle(
         txs.push(fee_tx.to_string());
     }
 
+    // ── Zero-Day 3: Enforce mandatory deadline ───────────────────
+    // Private builders MUST include the bundle within `max_deadline_secs`
+    // of the current timestamp. Open-ended bundles allow MEV extraction
+    // via time-decay (builder holds tx until slippage favors them).
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let max_deadline = config.max_bundle_deadline_secs;
+    let deadline = if max_deadline > 0 { max_deadline } else { DEFAULT_MAX_DEADLINE_SECS };
+    let max_ts = now + deadline;
+
+    info!(
+        now = now,
+        max_timestamp = max_ts,
+        deadline_secs = deadline,
+        "Zero-Day 3: Enforcing bundle deadline"
+    );
+
     let bundle = FlashbotsBundle {
         signed_transactions: txs,
         block_number: format!("0x{:x}", target_block),
-        min_timestamp: None,
-        max_timestamp: None,
+        min_timestamp: Some(now),             // Not before now
+        max_timestamp: Some(max_ts),          // Must land within deadline
     };
 
     info!(
@@ -248,6 +273,45 @@ pub async fn route_through_flashbots(
     );
 
     Ok(bundle_hash)
+}
+
+/// Zero-Day 3: Validate that a bundle's deadline is within acceptable bounds.
+/// Returns an error if the deadline window is too large (allows MEV time-decay).
+pub fn validate_bundle_deadline(bundle: &FlashbotsBundle, max_deadline_secs: u64) -> Result<()> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+
+    let deadline = if max_deadline_secs > 0 { max_deadline_secs } else { DEFAULT_MAX_DEADLINE_SECS };
+
+    // Check max_timestamp is present
+    let max_ts = bundle.max_timestamp.ok_or_else(|| {
+        anyhow::anyhow!(
+            "AEGIS ZERO-DAY 3: Bundle missing max_timestamp — open-ended intents \
+             are rejected to prevent MEV time-decay exploitation"
+        )
+    })?;
+
+    // Check deadline isn't too far in the future
+    if max_ts > now + deadline {
+        anyhow::bail!(
+            "AEGIS ZERO-DAY 3: Bundle deadline too far ({} secs > {} secs max). \
+             Ultra-short deadlines prevent private builders from holding txs.",
+            max_ts.saturating_sub(now),
+            deadline,
+        );
+    }
+
+    // Check deadline isn't in the past
+    if max_ts < now {
+        anyhow::bail!(
+            "AEGIS ZERO-DAY 3: Bundle deadline already expired (max_ts={}, now={})",
+            max_ts, now,
+        );
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

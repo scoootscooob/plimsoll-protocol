@@ -199,6 +199,39 @@ pub fn engine0_check(
     }
 }
 
+/// Zero-Day 4: Validate an incoming IOC submission for Sybil resistance.
+///
+/// Returns (accepted, reason). An IOC is rejected if:
+/// - The submitting agent's vault TVL is below $5,000
+/// - The stake weight is 0 (no skin in the game)
+///
+/// Accepted IOCs are weighted by TVL in the Swarm consensus:
+/// - $5K TVL agent's vote counts 0.05
+/// - $100K+ TVL agent's vote counts 1.0
+pub fn validate_ioc_submission(vault_tvl_usd: f64, stake_weight: f64) -> (bool, String) {
+    const MIN_TVL: f64 = 5_000.0;
+
+    if vault_tvl_usd < MIN_TVL {
+        return (false, format!(
+            "ZERO-DAY 4: IOC rejected — agent TVL ${:.0} < minimum ${:.0}. \
+             Sybil resistance requires skin in the game.",
+            vault_tvl_usd, MIN_TVL,
+        ));
+    }
+
+    if stake_weight <= 0.0 {
+        return (false, format!(
+            "ZERO-DAY 4: IOC rejected — stake weight {:.4} is zero or negative.",
+            stake_weight,
+        ));
+    }
+
+    (true, format!(
+        "IOC accepted with stake weight {:.4} (TVL ${:.0})",
+        stake_weight, vault_tvl_usd,
+    ))
+}
+
 /// Anti-Griefing Heuristic: determines if an address is immune to blacklisting.
 ///
 /// In production, this queries on-chain data (TVL, contract age, verification status)
@@ -349,5 +382,42 @@ mod tests {
         f.add_selector("0xb");
         f.add_calldata_hash("c");
         assert_eq!(f.len(), 3);
+    }
+
+    // ── Zero-Day 4: Sybil Telemetry Poisoning Tests ─────────────
+
+    #[test]
+    fn test_ioc_submission_rejected_low_tvl() {
+        let (accepted, reason) = validate_ioc_submission(1_000.0, 0.01);
+        assert!(!accepted);
+        assert!(reason.contains("ZERO-DAY 4"));
+        assert!(reason.contains("Sybil resistance"));
+    }
+
+    #[test]
+    fn test_ioc_submission_rejected_zero_tvl() {
+        let (accepted, _) = validate_ioc_submission(0.0, 0.0);
+        assert!(!accepted);
+    }
+
+    #[test]
+    fn test_ioc_submission_accepted_sufficient_tvl() {
+        let (accepted, reason) = validate_ioc_submission(10_000.0, 0.1);
+        assert!(accepted);
+        assert!(reason.contains("stake weight"));
+    }
+
+    #[test]
+    fn test_ioc_submission_accepted_high_tvl() {
+        let (accepted, reason) = validate_ioc_submission(500_000.0, 1.0);
+        assert!(accepted);
+        assert!(reason.contains("1.0000"));
+    }
+
+    #[test]
+    fn test_ioc_submission_rejected_zero_stake_weight() {
+        let (accepted, reason) = validate_ioc_submission(6_000.0, 0.0);
+        assert!(!accepted);
+        assert!(reason.contains("zero or negative"));
     }
 }

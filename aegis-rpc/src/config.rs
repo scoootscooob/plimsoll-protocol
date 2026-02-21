@@ -33,6 +33,18 @@ pub struct Config {
 
     /// Block number to fork from (0 = latest)
     pub fork_block: u64,
+
+    /// Zero-Day 1: Simulation gas ceiling (default: 5M).
+    /// Prevents flashloan gas bomb attacks from pegging CPU.
+    pub simulation_gas_ceiling: u64,
+
+    /// Zero-Day 1: Simulation wall-clock timeout in milliseconds (default: 50ms).
+    /// Catches opcodes cheap in gas but expensive in real time.
+    pub simulation_timeout_ms: u64,
+
+    /// Zero-Day 3: Maximum bundle deadline in seconds from current block timestamp.
+    /// Prevents MEV builders from holding transactions indefinitely.
+    pub max_bundle_deadline_secs: u64,
 }
 
 impl Config {
@@ -69,6 +81,18 @@ impl Config {
                 .unwrap_or_else(|_| "0".into())
                 .parse()
                 .unwrap_or(0),
+            simulation_gas_ceiling: std::env::var("AEGIS_SIM_GAS_CEILING")
+                .unwrap_or_else(|_| "5000000".into())
+                .parse()
+                .unwrap_or(5_000_000),
+            simulation_timeout_ms: std::env::var("AEGIS_SIM_TIMEOUT_MS")
+                .unwrap_or_else(|_| "50".into())
+                .parse()
+                .unwrap_or(50),
+            max_bundle_deadline_secs: std::env::var("AEGIS_MAX_BUNDLE_DEADLINE")
+                .unwrap_or_else(|_| "24".into())
+                .parse()
+                .unwrap_or(24),
         })
     }
 }

@@ -66,6 +66,16 @@ class ThreatFeedConfig:
     immune_addresses: Set[str] = field(default_factory=set)
     """Additional addresses immune to blacklisting (beyond built-in protocols)."""
 
+    # Zero-Day 4: Sybil Telemetry Poisoning defense
+    min_tvl_for_submission: float = 5_000.0
+    """Minimum vault TVL (USD) required to submit IOCs to the Swarm.
+    Agents below this threshold have their IOCs logged locally but
+    NOT propagated to the Cloud consensus."""
+
+    stake_weight_cap: float = 100_000.0
+    """TVL cap for stake weight calculation. TVL above this value
+    gives the same weight (1.0) to prevent plutocratic dominance."""
+
 
 @dataclass
 class ThreatFeedEngine:
@@ -265,3 +275,49 @@ class ThreatFeedEngine:
         self._consensus_count = 0
         self._last_updated = 0.0
         self._block_count = 0
+
+    # ── Zero-Day 4: Sybil Telemetry Poisoning Defense ─────────
+
+    def compute_stake_weight(self, vault_tvl_usd: float) -> float:
+        """Compute stake weight from vault TVL.
+
+        Linear scale capped at ``stake_weight_cap``::
+
+            $0      → 0.0 (rejected)
+            $5,000  → 0.05 (minimum accepted)
+            $50,000 → 0.5
+            $100K+  → 1.0 (maximum weight)
+        """
+        if vault_tvl_usd <= 0.0:
+            return 0.0
+        weight = vault_tvl_usd / self.config.stake_weight_cap
+        return min(weight, 1.0)
+
+    def validate_ioc_submission(self, vault_tvl_usd: float) -> tuple:
+        """Validate an IOC submission for Sybil resistance.
+
+        Returns (accepted: bool, reason: str).
+
+        IOCs from agents with TVL below ``min_tvl_for_submission`` are
+        rejected to prevent Sybil poisoning.
+        """
+        min_tvl = self.config.min_tvl_for_submission
+        stake_weight = self.compute_stake_weight(vault_tvl_usd)
+
+        if vault_tvl_usd < min_tvl:
+            return (False, (
+                f"ZERO-DAY 4: IOC rejected — agent TVL ${vault_tvl_usd:,.0f} "
+                f"< minimum ${min_tvl:,.0f}. Sybil resistance requires "
+                f"skin in the game."
+            ))
+
+        if stake_weight <= 0.0:
+            return (False, (
+                f"ZERO-DAY 4: IOC rejected — stake weight {stake_weight:.4f} "
+                f"is zero or negative."
+            ))
+
+        return (True, (
+            f"IOC accepted with stake weight {stake_weight:.4f} "
+            f"(TVL ${vault_tvl_usd:,.0f})"
+        ))
