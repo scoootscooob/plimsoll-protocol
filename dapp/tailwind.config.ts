@@ -22,15 +22,29 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        paper: '#FAF9F6',
-        ink: '#1A1918',
-        surface: '#EAE8E3',
-        terracotta: '#C84B31',
+        paper: "#FAF9F6",
+        ink: "#1A1918",
+        surface: "#EAE8E3",
+        terracotta: "#C84B31",
       },
       fontFamily: {
-        serif: ['"Newsreader"', '"EB Garamond"', '"Times New Roman"', 'serif'],
-        mono: ['"JetBrains Mono"', '"IBM Plex Mono"', '"Courier New"', 'monospace'],
-        sans: ['"Inter"', 'system-ui', 'sans-serif'],
+        serif: ['"Newsreader"', '"EB Garamond"', '"Times New Roman"', "serif"],
+        mono: [
+          '"JetBrains Mono"',
+          '"IBM Plex Mono"',
+          '"Courier New"',
+          "monospace",
+        ],
+        sans: ['"Inter"', "system-ui", "sans-serif"],
+      },
+      keyframes: {
+        SubtlePulse: {
+          "0%, 100%": { opacity: "1", transform: "scale(1)" },
+          "50%": { opacity: ".5", transform: "scale(0.8)" },
+        },
+      },
+      animation: {
+        SubtlePulse: "SubtlePulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite",
       },
     },
   },
