@@ -469,16 +469,18 @@ pub async fn handle_rpc(
         return resp;
     }
 
-    // ── Patch 2 + GOD-TIER 3: State-Delta + Block Pinning ───────
-    // We record BOTH what the simulation expects AND which block it
-    // simulated against. The on-chain vault rejects stale simulations.
+    // ── Patch 2 + GOD-TIER 3 + ZERO-DAY 2: State-Delta + Block Pinning + Codehash
+    // We record what the simulation expects, which block it simulated against,
+    // AND the target contract's bytecode hash. The on-chain vault rejects
+    // stale simulations and metamorphic bytecode swaps.
     info!(
         sim_balance_before = sim_result.balance_before,
         sim_balance_after = sim_result.balance_after,
         sim_loss_pct = sim_result.loss_pct,
         sim_gas_used = sim_result.gas_used,
         sim_block = sim_result.simulated_block,
-        "State-delta invariant captured (pinned to block)"
+        target_codehash = %sim_result.target_codehash,
+        "State-delta invariant captured (pinned to block + codehash)"
     );
 
     // Calculate and log fee

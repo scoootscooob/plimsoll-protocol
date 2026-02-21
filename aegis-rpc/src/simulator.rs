@@ -61,6 +61,21 @@ pub async fn simulate_transaction(
         .unwrap_or(0);
     info!(simulated_block = simulated_block, "GOD-TIER 3: Simulation pinned to block");
 
+    // ── ZERO-DAY 2: Fetch target contract's bytecode hash ───────
+    // Pin the target's EXTCODEHASH at simulation time. If an attacker
+    // swaps the contract code between simulation and execution
+    // (CREATE2/SELFDESTRUCT metamorphic attack), the on-chain vault
+    // rejects the stale codehash.
+    let target_codehash = fetch_extcodehash(&config.upstream_rpc_url, to).await
+        .unwrap_or_default();
+    if !target_codehash.is_empty() {
+        info!(
+            target = to,
+            codehash = %target_codehash,
+            "ZERO-DAY 2: Target bytecode pinned (EXTCODEHASH)"
+        );
+    }
+
     // ── Step 1: Fetch account state from upstream RPC ──────────
     let sender_balance = fetch_balance(&config.upstream_rpc_url, from).await
         .unwrap_or(U256::from(0));
@@ -143,6 +158,7 @@ pub async fn simulate_transaction(
                 sim_elapsed_ms, SIMULATION_TIMEOUT_MS
             )),
             simulated_block,
+            target_codehash: target_codehash.clone(),
         });
     }
 
@@ -192,6 +208,7 @@ pub async fn simulate_transaction(
                 loss_pct,
                 error,
                 simulated_block,
+                target_codehash: target_codehash.clone(),
             };
 
             info!(
@@ -214,6 +231,7 @@ pub async fn simulate_transaction(
                 loss_pct: 0.0,
                 error: Some(format!("EVM error: {}", e)),
                 simulated_block,
+                target_codehash: target_codehash.clone(),
             })
         }
     }
@@ -276,6 +294,51 @@ async fn fetch_block_number(rpc_url: &str) -> Result<u64> {
 
     let block = u64::from_str_radix(hex_str, 16).unwrap_or(0);
     Ok(block)
+}
+
+/// ZERO-DAY 2 (Mempool Metamorphosis): Fetch the EXTCODEHASH of a target address.
+/// Returns the keccak256 hash of the contract's deployed bytecode, or empty string
+/// if the address is an EOA (no code). This hash is pinned in the simulation result
+/// and enforced on-chain to prevent metamorphic contract attacks.
+async fn fetch_extcodehash(rpc_url: &str, address: &str) -> Result<String> {
+    let client = reqwest::Client::new();
+    // First check if there's code at the address
+    let payload = serde_json::json!({
+        "jsonrpc": "2.0",
+        "method": "eth_getCode",
+        "params": [address, "latest"],
+        "id": 1
+    });
+
+    let resp = client
+        .post(rpc_url)
+        .json(&payload)
+        .send()
+        .await
+        .context("Failed to fetch contract code")?;
+
+    let body: serde_json::Value = resp.json().await
+        .context("Failed to parse code response")?;
+
+    let code_hex = body["result"]
+        .as_str()
+        .unwrap_or("0x");
+
+    // EOA (no code) → empty codehash (skip pinning)
+    if code_hex == "0x" || code_hex.is_empty() {
+        return Ok(String::new());
+    }
+
+    // Compute keccak256 of the bytecode
+    let code_bytes = hex::decode(code_hex.trim_start_matches("0x"))
+        .unwrap_or_default();
+    if code_bytes.is_empty() {
+        return Ok(String::new());
+    }
+
+    use alloy_primitives::keccak256;
+    let hash = keccak256(&code_bytes);
+    Ok(format!("0x{}", hex::encode(hash.as_slice())))
 }
 
 /// Detect ERC-20 Approval events in execution logs.

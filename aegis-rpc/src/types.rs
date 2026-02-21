@@ -42,6 +42,13 @@ pub struct SimulationResult {
     /// If a reorg or sequencer lag pushes execution beyond this window,
     /// the EVM natively rejects the stale simulation.
     pub simulated_block: u64,
+    /// ZERO-DAY 2 (Mempool Metamorphosis): keccak256 hash of the target
+    /// contract's bytecode at simulation time. The AegisVault.sol contract
+    /// enforces: `require(extcodehash(target) == simulated_codehash)`.
+    /// If an attacker uses CREATE2/SELFDESTRUCT or upgradeTo() to swap
+    /// contract code between simulation and execution, the EVM rejects it.
+    /// Empty string = EOA (no code to pin).
+    pub target_codehash: String,
 }
 
 impl JsonRpcResponse {

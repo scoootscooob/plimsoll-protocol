@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
 
@@ -57,6 +58,16 @@ class AegisConfig:
     tee: TEEConfig = field(default_factory=TEEConfig)
     enable_vault: bool = True
     on_block: Callable[[Verdict], None] | None = None
+
+    # ── ZERO-DAY 4: Cognitive Starvation Defense ──────────────────
+    # If an agent hits the firewall `strike_max` times within
+    # `strike_window_secs`, trigger a "Cognitive Sever" — the agent's
+    # LLM API key is revoked for `sever_duration_secs`.
+    strike_max: int = 5                  # Max blocks before sever
+    strike_window_secs: float = 60.0     # Rolling window for strikes
+    sever_duration_secs: float = 900.0   # 15 min lockout
+    cognitive_sever_enabled: bool = False  # Disabled by default
+    on_cognitive_sever: Callable[[], None] | None = None  # Webhook callback
 
 
 @dataclass
@@ -92,6 +103,12 @@ class AegisFirewall:
     _history: list[tuple[float, Verdict]] = field(
         default_factory=list, init=False, repr=False
     )
+    # ZERO-DAY 4: Cognitive Starvation — strike counter
+    _strike_timestamps: deque = field(
+        default_factory=deque, init=False, repr=False
+    )
+    _cognitive_severed: bool = field(default=False, init=False, repr=False)
+    _sever_until: float = field(default=0.0, init=False, repr=False)
 
     def __post_init__(self) -> None:
         self._threat_feed = ThreatFeedEngine(config=self.config.threat_feed)
@@ -119,6 +136,34 @@ class AegisFirewall:
         If escrow is enabled and the blocked spend exceeds
         ``auto_escalate_above``, the transaction is held for human review.
         """
+
+        # ── ZERO-DAY 4: Cognitive Starvation — check sever state ──
+        # If the agent has been cognitively severed, block ALL actions
+        # until the sever expires. This prevents infinite retry loops
+        # from burning cloud compute / API credits.
+        if self._cognitive_severed:
+            now = time.time()
+            if now < self._sever_until:
+                remaining = int(self._sever_until - now)
+                return self._record(Verdict(
+                    code=VerdictCode.BLOCK_COGNITIVE_STARVATION,
+                    reason=(
+                        f"ZERO-DAY 4 (COGNITIVE STARVATION): Agent is "
+                        f"cognitively severed. {remaining}s remaining in "
+                        f"cooldown. Too many blocked attempts detected — "
+                        f"LLM API access revoked to prevent compute drain."
+                    ),
+                    engine="CognitiveSever",
+                    metadata={
+                        "sever_until": self._sever_until,
+                        "remaining_secs": remaining,
+                    },
+                ))
+            else:
+                # Sever has expired — resume normal operation
+                self._cognitive_severed = False
+                self._strike_timestamps.clear()
+                logger.info("ZERO-DAY 4: Cognitive sever expired — resuming")
 
         # Engine 0: Threat Feed — is target globally blacklisted?
         v = self._threat_feed.evaluate(payload)
@@ -275,6 +320,36 @@ class AegisFirewall:
             logger.warning("AEGIS BLOCK: %s", verdict.reason)
             if self.config.on_block:
                 self.config.on_block(verdict)
+
+            # ── ZERO-DAY 4: Cognitive Starvation — record strike ──
+            if self.config.cognitive_sever_enabled:
+                self._strike_timestamps.append(now)
+                # Prune timestamps outside the rolling window
+                cutoff = now - self.config.strike_window_secs
+                while (
+                    self._strike_timestamps
+                    and self._strike_timestamps[0] < cutoff
+                ):
+                    self._strike_timestamps.popleft()
+                # Check if strike count exceeds threshold
+                if len(self._strike_timestamps) >= self.config.strike_max:
+                    self._cognitive_severed = True
+                    self._sever_until = now + self.config.sever_duration_secs
+                    logger.critical(
+                        "ZERO-DAY 4: COGNITIVE SEVER TRIGGERED — "
+                        "%d blocks in %.0fs window. Agent locked out for %.0fs.",
+                        len(self._strike_timestamps),
+                        self.config.strike_window_secs,
+                        self.config.sever_duration_secs,
+                    )
+                    # Fire webhook callback (exception-safe)
+                    if self.config.on_cognitive_sever:
+                        try:
+                            self.config.on_cognitive_sever()
+                        except Exception:
+                            logger.exception(
+                                "ZERO-DAY 4: on_cognitive_sever callback failed"
+                            )
         else:
             self._allowed_count += 1
 
@@ -308,3 +383,7 @@ class AegisFirewall:
         self._allowed_count = 0
         self._escrowed_count = 0
         self._history.clear()
+        # ZERO-DAY 4: Reset cognitive sever state
+        self._strike_timestamps.clear()
+        self._cognitive_severed = False
+        self._sever_until = 0.0
