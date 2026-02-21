@@ -11,14 +11,14 @@ from __future__ import annotations
 import time
 import pytest
 
-from aegis.enclave.vault import KeyVault, AegisEnforcementError
-from aegis.engines.capital_velocity import (
+from plimsoll.enclave.vault import KeyVault, PlimsollEnforcementError
+from plimsoll.engines.capital_velocity import (
     CapitalVelocityConfig,
     CapitalVelocityEngine,
 )
-from aegis.engines.threat_feed import ThreatFeedConfig, ThreatFeedEngine
-from aegis.firewall import AegisFirewall, AegisConfig
-from aegis.verdict import VerdictCode
+from plimsoll.engines.threat_feed import ThreatFeedConfig, ThreatFeedEngine
+from plimsoll.firewall import PlimsollFirewall, PlimsollConfig
+from plimsoll.verdict import VerdictCode
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -33,7 +33,7 @@ class TestEIP712SilentDagger:
         """Create a vault with a firewall bound for testing."""
         vault = KeyVault()
         vault.store("test_key", "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
-        firewall = AegisFirewall(config=AegisConfig(
+        firewall = PlimsollFirewall(config=PlimsollConfig(
             velocity=CapitalVelocityConfig(
                 v_max=1000.0,
                 max_single_amount=float("inf"),
@@ -70,7 +70,7 @@ class TestEIP712SilentDagger:
                 "deadline": 99999999999,
             },
         }
-        with pytest.raises(AegisEnforcementError) as exc_info:
+        with pytest.raises(PlimsollEnforcementError) as exc_info:
             vault.sign_typed_data("test_key", typed_data)
         assert "MAX_UINT" in str(exc_info.value)
         assert "Silent Dagger" in str(exc_info.value) or "GOD-TIER 1" in str(exc_info.value)
@@ -87,7 +87,7 @@ class TestEIP712SilentDagger:
                 "value": "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
             },
         }
-        with pytest.raises(AegisEnforcementError) as exc_info:
+        with pytest.raises(PlimsollEnforcementError) as exc_info:
             vault.sign_typed_data("test_key", typed_data)
         assert "MAX_UINT" in str(exc_info.value)
 
@@ -104,7 +104,7 @@ class TestEIP712SilentDagger:
                 "value": max_uint,
             },
         }
-        with pytest.raises(AegisEnforcementError):
+        with pytest.raises(PlimsollEnforcementError):
             vault.sign_typed_data("test_key", typed_data)
 
     def test_permit_batch_detected(self):
@@ -120,7 +120,7 @@ class TestEIP712SilentDagger:
                 "value": max_uint,
             },
         }
-        with pytest.raises(AegisEnforcementError):
+        with pytest.raises(PlimsollEnforcementError):
             vault.sign_typed_data("test_key", typed_data)
 
     def test_permit_transfer_from_detected(self):
@@ -136,7 +136,7 @@ class TestEIP712SilentDagger:
                 "value": max_uint,
             },
         }
-        with pytest.raises(AegisEnforcementError):
+        with pytest.raises(PlimsollEnforcementError):
             vault.sign_typed_data("test_key", typed_data)
 
     def test_order_components_detected(self):
@@ -152,7 +152,7 @@ class TestEIP712SilentDagger:
                 "value": max_uint,
             },
         }
-        with pytest.raises(AegisEnforcementError):
+        with pytest.raises(PlimsollEnforcementError):
             vault.sign_typed_data("test_key", typed_data)
 
     def test_meta_transaction_detected(self):
@@ -168,7 +168,7 @@ class TestEIP712SilentDagger:
                 "value": max_uint,
             },
         }
-        with pytest.raises(AegisEnforcementError):
+        with pytest.raises(PlimsollEnforcementError):
             vault.sign_typed_data("test_key", typed_data)
 
     def test_permit_with_firewall_evaluates_synthetic(self):
@@ -222,13 +222,13 @@ class TestEIP712SilentDagger:
                 "value": max_uint,
             },
         }
-        with pytest.raises(AegisEnforcementError) as exc_info:
+        with pytest.raises(PlimsollEnforcementError) as exc_info:
             vault.sign_typed_data("test_key", typed_data)
         assert "PermitDecoder" in str(exc_info.value)
 
     def test_enforcement_error_attributes(self):
-        """AegisEnforcementError has correct attributes."""
-        err = AegisEnforcementError(
+        """PlimsollEnforcementError has correct attributes."""
+        err = PlimsollEnforcementError(
             reason="test reason",
             engine="PermitDecoder",
             code="BLOCK_EIP712_PERMIT",
@@ -236,7 +236,7 @@ class TestEIP712SilentDagger:
         assert err.reason == "test reason"
         assert err.engine == "PermitDecoder"
         assert err.code == "BLOCK_EIP712_PERMIT"
-        assert "AEGIS VAULT ENFORCEMENT" in str(err)
+        assert "PLIMSOLL VAULT ENFORCEMENT" in str(err)
 
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -520,7 +520,7 @@ class TestGodTierIntegration:
     def test_vault_firewall_binding_once(self):
         """Firewall can only be bound once."""
         vault = KeyVault()
-        fw = AegisFirewall()
+        fw = PlimsollFirewall()
         vault.bind_firewall(fw)
         with pytest.raises(RuntimeError, match="already bound"):
             vault.bind_firewall(fw)
@@ -531,7 +531,7 @@ class TestGodTierIntegration:
         vault = KeyVault()
         vault.store("k", "deadbeef" * 8)
         max_uint = "115792089237316195423570985008687907853269984665640564039457584007913129639935"
-        with pytest.raises(AegisEnforcementError):
+        with pytest.raises(PlimsollEnforcementError):
             vault.sign_typed_data("k", {
                 "primaryType": "Permit",
                 "domain": {"verifyingContract": "0xT"},

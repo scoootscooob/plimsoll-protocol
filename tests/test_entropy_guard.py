@@ -3,8 +3,8 @@
 import secrets
 import base64
 
-from aegis.engines.entropy_guard import EntropyGuardEngine, EntropyGuardConfig
-from aegis.verdict import VerdictCode
+from plimsoll.engines.entropy_guard import EntropyGuardEngine, EntropyGuardConfig
+from plimsoll.verdict import VerdictCode
 
 
 def test_allows_normal_api_payload():

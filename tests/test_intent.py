@@ -1,12 +1,12 @@
-"""Tests for the ``aegis.intent`` NormalizedIntent universal abstraction."""
+"""Tests for the ``plimsoll.intent`` NormalizedIntent universal abstraction."""
 
 from __future__ import annotations
 
 import pytest
 
-from aegis.firewall import AegisFirewall, AegisConfig
-from aegis.engines.capital_velocity import CapitalVelocityConfig
-from aegis.intent import (
+from plimsoll.firewall import PlimsollFirewall, PlimsollConfig
+from plimsoll.engines.capital_velocity import CapitalVelocityConfig
+from plimsoll.intent import (
     IntentAction,
     IntentProtocol,
     NormalizedIntent,
@@ -15,7 +15,7 @@ from aegis.intent import (
     intent_from_http_request,
     intent_from_solana_tx,
 )
-from aegis.verdict import VerdictCode
+from plimsoll.verdict import VerdictCode
 
 
 # ────────────────────────────────────────────────────────────────────
@@ -33,7 +33,7 @@ class TestNormalizedIntent:
         with pytest.raises(AttributeError):
             intent.capital_at_risk_usd = 999.0  # type: ignore[misc]
 
-    def test_to_aegis_payload_basic(self) -> None:
+    def test_to_plimsoll_payload_basic(self) -> None:
         intent = NormalizedIntent(
             protocol=IntentProtocol.EVM,
             action=IntentAction.TRANSFER,
@@ -41,21 +41,21 @@ class TestNormalizedIntent:
             target="0xAAA",
             function="0xa9059cbb",
         )
-        p = intent.to_aegis_payload()
+        p = intent.to_plimsoll_payload()
         assert p["target"] == "0xAAA"
         assert p["amount"] == 100.0
         assert p["protocol"] == "EVM"
         assert p["action"] == "TRANSFER"
         assert p["function"] == "0xa9059cbb"
 
-    def test_to_aegis_payload_uses_amount_usd_when_set(self) -> None:
+    def test_to_plimsoll_payload_uses_amount_usd_when_set(self) -> None:
         intent = NormalizedIntent(
             protocol=IntentProtocol.HTTP,
             action=IntentAction.API_CHARGE,
             capital_at_risk_usd=50.0,
             amount_usd=50.0,
         )
-        p = intent.to_aegis_payload()
+        p = intent.to_plimsoll_payload()
         assert p["amount"] == 50.0
 
     def test_metadata_included_in_payload(self) -> None:
@@ -65,7 +65,7 @@ class TestNormalizedIntent:
             capital_at_risk_usd=500.0,
             metadata={"fee_sats": 10000},
         )
-        p = intent.to_aegis_payload()
+        p = intent.to_plimsoll_payload()
         assert p["fee_sats"] == 10000
 
 
@@ -185,7 +185,7 @@ class TestIntentFromHttpRequest:
 
 class TestFirewallEvaluateIntent:
     def test_evaluate_intent_allows_clean_intent(self) -> None:
-        fw = AegisFirewall(config=AegisConfig())
+        fw = PlimsollFirewall(config=PlimsollConfig())
         intent = NormalizedIntent(
             protocol=IntentProtocol.EVM,
             action=IntentAction.TRANSFER,
@@ -196,7 +196,7 @@ class TestFirewallEvaluateIntent:
         assert verdict.allowed
 
     def test_evaluate_intent_blocks_via_velocity(self) -> None:
-        fw = AegisFirewall(config=AegisConfig(
+        fw = PlimsollFirewall(config=PlimsollConfig(
             velocity=CapitalVelocityConfig(v_max=0.001, max_single_amount=5.0),
         ))
         intent = NormalizedIntent(
@@ -209,13 +209,13 @@ class TestFirewallEvaluateIntent:
         assert verdict.blocked
 
     def test_evaluate_intent_rejects_non_intent(self) -> None:
-        fw = AegisFirewall(config=AegisConfig())
+        fw = PlimsollFirewall(config=PlimsollConfig())
         with pytest.raises(TypeError, match="NormalizedIntent"):
             fw.evaluate_intent({"target": "0xAAA"})
 
     def test_cross_chain_velocity_shared(self) -> None:
         """EVM + HTTP intents share the same velocity budget."""
-        fw = AegisFirewall(config=AegisConfig(
+        fw = PlimsollFirewall(config=PlimsollConfig(
             velocity=CapitalVelocityConfig(v_max=10.0, max_single_amount=100.0),
         ))
 

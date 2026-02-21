@@ -9,7 +9,7 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        aegis: {
+        plimsoll: {
           50: "#f0f7ff",
           100: "#e0eefe",
           200: "#b9ddfe",

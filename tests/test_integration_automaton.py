@@ -1,4 +1,4 @@
-"""Tests for the ``AegisAutomatonWallet`` integration."""
+"""Tests for the ``PlimsollAutomatonWallet`` integration."""
 
 from __future__ import annotations
 
@@ -9,10 +9,10 @@ from unittest import mock
 
 import pytest
 
-from aegis.firewall import AegisFirewall, AegisConfig
-from aegis.engines.capital_velocity import CapitalVelocityConfig
-from aegis.engines.trajectory_hash import TrajectoryHashConfig
-from aegis.verdict import VerdictCode
+from plimsoll.firewall import PlimsollFirewall, PlimsollConfig
+from plimsoll.engines.capital_velocity import CapitalVelocityConfig
+from plimsoll.engines.trajectory_hash import TrajectoryHashConfig
+from plimsoll.verdict import VerdictCode
 
 
 # ── Fake Automaton module ─────────────────────────────────────────
@@ -41,13 +41,13 @@ def _mock_automaton():
 
 # ────────────────────────────────────────────────────────────────────
 
-class TestAegisAutomatonWallet:
+class TestPlimsollAutomatonWallet:
 
     def test_allows_clean_tx(self) -> None:
         with mock.patch.dict(sys.modules, _mock_automaton()):
-            from aegis.integrations.automaton import AegisAutomatonWallet
+            from plimsoll.integrations.automaton import PlimsollAutomatonWallet
 
-            wallet = AegisAutomatonWallet(
+            wallet = PlimsollAutomatonWallet(
                 private_key="0xdeadbeef",
                 rpc_url="https://rpc.example.com",
                 max_daily_spend=10_000,
@@ -57,47 +57,47 @@ class TestAegisAutomatonWallet:
 
     def test_blocks_velocity_breach(self) -> None:
         with mock.patch.dict(sys.modules, _mock_automaton()):
-            from aegis.integrations.automaton import AegisAutomatonWallet
+            from plimsoll.integrations.automaton import PlimsollAutomatonWallet
 
-            wallet = AegisAutomatonWallet(
+            wallet = PlimsollAutomatonWallet(
                 private_key="0xdeadbeef",
                 rpc_url="https://rpc.example.com",
                 max_daily_spend=10,
-                aegis_config=AegisConfig(
+                plimsoll_config=PlimsollConfig(
                     velocity=CapitalVelocityConfig(
                         v_max=0.001, max_single_amount=5.0,
                     ),
                 ),
             )
             result = wallet.execute({"target": "0xAAA", "amount": 100.0})
-            assert result["aegis_blocked"] is True
+            assert result["plimsoll_blocked"] is True
             assert "feedback" in result
 
     def test_blocks_loop_detection(self) -> None:
         with mock.patch.dict(sys.modules, _mock_automaton()):
-            from aegis.integrations.automaton import AegisAutomatonWallet
+            from plimsoll.integrations.automaton import PlimsollAutomatonWallet
 
-            wallet = AegisAutomatonWallet(
+            wallet = PlimsollAutomatonWallet(
                 private_key="0xdeadbeef",
                 rpc_url="https://rpc.example.com",
-                aegis_config=AegisConfig(
+                plimsoll_config=PlimsollConfig(
                     trajectory=TrajectoryHashConfig(max_duplicates=1),
                 ),
             )
             payload = {"target": "0xAAA", "amount": 1.0, "function": "transfer"}
             wallet.execute(payload)  # 1st: allowed
             result = wallet.execute(payload)  # 2nd: loop detected
-            assert result["aegis_blocked"] is True
+            assert result["plimsoll_blocked"] is True
 
     def test_exposes_firewall(self) -> None:
         with mock.patch.dict(sys.modules, _mock_automaton()):
-            from aegis.integrations.automaton import AegisAutomatonWallet
+            from plimsoll.integrations.automaton import PlimsollAutomatonWallet
 
-            wallet = AegisAutomatonWallet(
+            wallet = PlimsollAutomatonWallet(
                 private_key="0xdeadbeef",
                 rpc_url="https://rpc.example.com",
             )
-            assert isinstance(wallet.firewall, AegisFirewall)
+            assert isinstance(wallet.firewall, PlimsollFirewall)
 
     def test_import_error_without_automaton(self) -> None:
         """Should raise ImportError with helpful message when automaton is missing."""
@@ -107,29 +107,29 @@ class TestAegisAutomatonWallet:
 
         try:
             # Force re-import
-            if "aegis.integrations.automaton" in sys.modules:
-                del sys.modules["aegis.integrations.automaton"]
+            if "plimsoll.integrations.automaton" in sys.modules:
+                del sys.modules["plimsoll.integrations.automaton"]
 
-            from aegis.integrations.automaton import AegisAutomatonWallet
+            from plimsoll.integrations.automaton import PlimsollAutomatonWallet
 
             with pytest.raises(ImportError, match="automaton"):
-                AegisAutomatonWallet(
+                PlimsollAutomatonWallet(
                     private_key="0xdeadbeef",
                     rpc_url="https://rpc.example.com",
                 )
         finally:
             sys.modules.update(saved)
 
-    def test_custom_aegis_config(self) -> None:
+    def test_custom_plimsoll_config(self) -> None:
         with mock.patch.dict(sys.modules, _mock_automaton()):
-            from aegis.integrations.automaton import AegisAutomatonWallet
+            from plimsoll.integrations.automaton import PlimsollAutomatonWallet
 
-            custom = AegisConfig(
+            custom = PlimsollConfig(
                 velocity=CapitalVelocityConfig(v_max=999.0),
             )
-            wallet = AegisAutomatonWallet(
+            wallet = PlimsollAutomatonWallet(
                 private_key="0xdeadbeef",
                 rpc_url="https://rpc.example.com",
-                aegis_config=custom,
+                plimsoll_config=custom,
             )
             assert wallet.firewall.config.velocity.v_max == 999.0

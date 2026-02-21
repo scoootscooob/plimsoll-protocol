@@ -116,7 +116,7 @@ impl EventProcessor {
 
         // In production:
         // ```sql
-        // INSERT INTO aegis_events (id, chain_name, chain_id, tx_hash, ...)
+        // INSERT INTO plimsoll_events (id, chain_name, chain_id, tx_hash, ...)
         // VALUES ($1, $2, $3, $4, ...)
         // ON CONFLICT (id) DO NOTHING
         // ```

@@ -1,4 +1,4 @@
-"""Tests for the Aegis Nitro Enclave KMS bootstrap module.
+"""Tests for the Plimsoll Nitro Enclave KMS bootstrap module.
 
 Validates the full key lifecycle:
   1. Key generation via (mock) KMS
@@ -238,7 +238,7 @@ class TestFactory:
         assert isinstance(manager, TurnkeyKeyManager)
 
     def test_factory_from_env(self, monkeypatch):
-        monkeypatch.setenv("AEGIS_KMS_KEY_ARN", "arn:test")
-        monkeypatch.setenv("AEGIS_KEY_PROVIDER", "kms")
+        monkeypatch.setenv("PLIMSOLL_KMS_KEY_ARN", "arn:test")
+        monkeypatch.setenv("PLIMSOLL_KEY_PROVIDER", "kms")
         manager = create_key_manager()
         assert isinstance(manager, KMSKeyManager)

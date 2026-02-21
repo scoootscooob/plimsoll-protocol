@@ -5,8 +5,8 @@ from __future__ import annotations
 import struct
 import time
 
-from aegis.engines.capital_velocity import CapitalVelocityEngine, CapitalVelocityConfig
-from aegis.verdict import VerdictCode
+from plimsoll.engines.capital_velocity import CapitalVelocityEngine, CapitalVelocityConfig
+from plimsoll.verdict import VerdictCode
 
 
 def test_jitter_disabled_by_default():

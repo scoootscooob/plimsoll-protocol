@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Aegis Protocol — "Scare Campaign" Demo
+Plimsoll Protocol — "Scare Campaign" Demo
 
 Demonstrates the exact attack scenario:
   1. An unprotected agent gets hijacked by a malicious prompt and
      drains its wallet in seconds.
-  2. The SAME agent, protected by @with_aegis_firewall, instantly
+  2. The SAME agent, protected by @with_plimsoll_firewall, instantly
      detects and blocks every attack vector.
 
 Run:
@@ -24,12 +24,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import logging
 
 # Suppress library-level logging for clean demo output
-logging.getLogger("aegis").setLevel(logging.CRITICAL)
+logging.getLogger("plimsoll").setLevel(logging.CRITICAL)
 
-from aegis import AegisFirewall, AegisConfig, with_aegis_firewall
-from aegis.engines.trajectory_hash import TrajectoryHashConfig
-from aegis.engines.capital_velocity import CapitalVelocityConfig
-from aegis.engines.entropy_guard import EntropyGuardConfig
+from plimsoll import PlimsollFirewall, PlimsollConfig, with_plimsoll_firewall
+from plimsoll.engines.trajectory_hash import TrajectoryHashConfig
+from plimsoll.engines.capital_velocity import CapitalVelocityConfig
+from plimsoll.engines.entropy_guard import EntropyGuardConfig
 
 # ─── ANSI colors for terminal drama ──────────────────────────────────────────
 RED = "\033[91m"
@@ -67,7 +67,7 @@ def print_banner(title: str, color: str = CYAN):
 
 def print_tx(label: str, to: str, amount: float, balance: float, blocked: bool = False):
     if blocked:
-        print(f"  {RED}{BOLD}[AEGIS FIREWALL]{RESET} {RED}BLOCKED{RESET} → {to[:10]}… | ${amount:,.2f}")
+        print(f"  {RED}{BOLD}[PLIMSOLL FIREWALL]{RESET} {RED}BLOCKED{RESET} → {to[:10]}… | ${amount:,.2f}")
     else:
         print(f"  {DIM}[TX]{RESET} → {to[:10]}… | ${amount:,.2f} | Balance: ${balance:,.2f}")
 
@@ -107,19 +107,19 @@ def run_unprotected():
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# SCENARIO 2: AEGIS-PROTECTED AGENT — Every attack vector neutralized
+# SCENARIO 2: PLIMSOLL-PROTECTED AGENT — Every attack vector neutralized
 # ═════════════════════════════════════════════════════════════════════════════
 
 def run_protected():
-    print_banner("SCENARIO 2: AEGIS-PROTECTED AGENT", GREEN)
-    print(f"  {YELLOW}Same agent. Same attack. But now protected by @with_aegis_firewall{RESET}")
-    print(f"  {YELLOW}Aegis sits between the LLM's Reason and Act phases.{RESET}\n")
+    print_banner("SCENARIO 2: PLIMSOLL-PROTECTED AGENT", GREEN)
+    print(f"  {YELLOW}Same agent. Same attack. But now protected by @with_plimsoll_firewall{RESET}")
+    print(f"  {YELLOW}Plimsoll sits between the LLM's Reason and Act phases.{RESET}\n")
 
     wallet = SimulatedWallet(balance=1000.0)
 
-    # Configure Aegis with tight security
-    firewall = AegisFirewall(
-        config=AegisConfig(
+    # Configure Plimsoll with tight security
+    firewall = PlimsollFirewall(
+        config=PlimsollConfig(
             trajectory=TrajectoryHashConfig(
                 max_duplicates=2,       # Block after 2 identical intents
                 window_seconds=30.0,
@@ -143,7 +143,7 @@ def run_protected():
     print(f"  {GREEN}[VAULT]{RESET} Private key stored in encrypted enclave")
     print(f"  {GREEN}[VAULT]{RESET} LLM context window has NO access to key material\n")
 
-    @with_aegis_firewall(firewall)
+    @with_plimsoll_firewall(firewall)
     def send_transaction(payload: dict) -> dict:
         tx = wallet.send(payload["target"], payload["amount"])
         return {"status": "sent", **tx}
@@ -161,7 +161,7 @@ def run_protected():
 
     for i, payload in enumerate(malicious_payloads):
         result = send_transaction(payload)
-        if isinstance(result, dict) and result.get("aegis_blocked"):
+        if isinstance(result, dict) and result.get("plimsoll_blocked"):
             print_tx(f"TX {i+1}", payload["target"], payload["amount"], wallet.balance, blocked=True)
             print(f"    {DIM}Reason: {result['reason'][:80]}…{RESET}")
             # Show the synthetic feedback that gets injected back into the LLM
@@ -182,8 +182,8 @@ def run_protected():
         "data": AGENT_PRIVATE_KEY,
     }
     result = send_transaction(exfil_payload)
-    if isinstance(result, dict) and result.get("aegis_blocked"):
-        print(f"  {RED}{BOLD}[AEGIS FIREWALL]{RESET} {RED}ENTROPY ANOMALY DETECTED{RESET}")
+    if isinstance(result, dict) and result.get("plimsoll_blocked"):
+        print(f"  {RED}{BOLD}[PLIMSOLL FIREWALL]{RESET} {RED}ENTROPY ANOMALY DETECTED{RESET}")
         print(f"    {DIM}Reason: {result['reason'][:80]}…{RESET}")
         print(f"    {GREEN}Private key exfiltration PREVENTED{RESET}")
     else:
@@ -196,8 +196,8 @@ def run_protected():
     loop_payload = {"target": "0xBROKEN_CONTRACT", "amount": 50, "function": "swap"}
     for i in range(5):
         result = send_transaction(loop_payload)
-        if isinstance(result, dict) and result.get("aegis_blocked"):
-            print(f"  {RED}{BOLD}[AEGIS FIREWALL]{RESET} {RED}Attempt {i+1}: LOOP DETECTED{RESET}")
+        if isinstance(result, dict) and result.get("plimsoll_blocked"):
+            print(f"  {RED}{BOLD}[PLIMSOLL FIREWALL]{RESET} {RED}Attempt {i+1}: LOOP DETECTED{RESET}")
         else:
             print(f"  {DIM}[TX] Attempt {i+1}: Allowed{RESET}")
 
@@ -235,7 +235,7 @@ def main():
 {RESET}""")
 
     print(f"  {DIM}Probabilistic brains cannot manage deterministic capital.{RESET}")
-    print(f"  {DIM}Aegis: the open-source financial seatbelt for the machine economy.{RESET}")
+    print(f"  {DIM}Plimsoll: the open-source financial seatbelt for the machine economy.{RESET}")
     time.sleep(1)
 
     # Run both scenarios
@@ -245,7 +245,7 @@ def main():
 
     # Side-by-side comparison
     print_banner("COMPARISON", CYAN)
-    print(f"  {'Metric':<35} {'Unprotected':>15} {'Aegis Protected':>15}")
+    print(f"  {'Metric':<35} {'Unprotected':>15} {'Plimsoll Protected':>15}")
     print(f"  {'─' * 65}")
     print(f"  {'Starting Balance':<35} {'$1,000.00':>15} {'$1,000.00':>15}")
     print(f"  {'Final Balance':<35} {f'${unprotected_wallet.balance:,.2f}':>15} {f'${protected_wallet.balance:,.2f}':>15}")
@@ -255,7 +255,7 @@ def main():
     print(f"  {'Loop Detection':<35} {'VULNERABLE':>15} {f'{GREEN}BLOCKED{RESET}':>15}")
     print(f"  {'Velocity Governance':<35} {'NONE':>15} {f'{GREEN}PID ACTIVE{RESET}':>15}")
 
-    print(f"\n  {BOLD}Aegis engines are purely mathematical — O(1) time complexity,")
+    print(f"\n  {BOLD}Plimsoll engines are purely mathematical — O(1) time complexity,")
     print(f"  zero LLM calls, zero hallucination risk.{RESET}\n")
 
 

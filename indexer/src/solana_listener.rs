@@ -1,4 +1,4 @@
-//! Solana Chain Listener — subscribes to Aegis Vault program events.
+//! Solana Chain Listener — subscribes to Plimsoll Vault program events.
 //!
 //! Connects to a Solana RPC node via WebSocket and translates
 //! Anchor program events into `IndexedEvent` records.
@@ -11,7 +11,7 @@ use serde::Deserialize;
 use std::sync::Arc;
 use tracing::info;
 
-/// Anchor event discriminators for the aegis-vault program.
+/// Anchor event discriminators for the plimsoll-vault program.
 ///
 /// Anchor uses the first 8 bytes of `sha256("event:<EventName>")` as
 /// the event discriminator.  We pre-compute these for fast matching.
@@ -177,7 +177,7 @@ fn parse_log_data(logs: &[String]) -> (String, String, u64) {
             }
         }
 
-        // Parse "Aegis Vault initialized for owner <pubkey>"
+        // Parse "Plimsoll Vault initialized for owner <pubkey>"
         if log.contains("initialized for owner") {
             if let Some(key) = log.split_whitespace().last() {
                 vault = key.to_string();

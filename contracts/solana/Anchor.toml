@@ -3,10 +3,10 @@ seeds = false
 skip-lint = false
 
 [programs.localnet]
-aegis_vault = "AeG1sVau1tSo1anaProgramXXXXXXXXXXXXXXXXXX"
+plimsoll_vault = "AeG1sVau1tSo1anaProgramXXXXXXXXXXXXXXXXXX"
 
 [programs.devnet]
-aegis_vault = "AeG1sVau1tSo1anaProgramXXXXXXXXXXXXXXXXXX"
+plimsoll_vault = "AeG1sVau1tSo1anaProgramXXXXXXXXXXXXXXXXXX"
 
 [registry]
 url = "https://api.apr.dev"

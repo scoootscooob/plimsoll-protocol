@@ -2,8 +2,8 @@
 
 import time
 
-from aegis.engines.trajectory_hash import TrajectoryHashEngine, TrajectoryHashConfig
-from aegis.verdict import VerdictCode
+from plimsoll.engines.trajectory_hash import TrajectoryHashEngine, TrajectoryHashConfig
+from plimsoll.verdict import VerdictCode
 
 
 def test_allows_unique_payloads():
@@ -90,7 +90,7 @@ def test_feedback_prompt_on_block():
     engine.evaluate(payload)
     v = engine.evaluate(payload)
     feedback = v.feedback_prompt()
-    assert "AEGIS FIREWALL" in feedback
+    assert "PLIMSOLL FIREWALL" in feedback
     assert "DO NOT RETRY" in feedback
 
 

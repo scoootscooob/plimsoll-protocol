@@ -1,7 +1,7 @@
-//! Aegis Bitcoin Vault — Taproot 2-of-2 Multisig Script.
+//! Plimsoll Bitcoin Vault — Taproot 2-of-2 Multisig Script.
 //!
 //! Implements a P2TR (Pay-to-Taproot) UTXO guard that requires BOTH
-//! the agent key AND the Aegis proxy key to sign before spending.
+//! the agent key AND the Plimsoll proxy key to sign before spending.
 //!
 //! ## Architecture
 //!
@@ -9,7 +9,7 @@
 //!   ┌─────────────────────────────────────────────────────┐
 //!   │  P2TR Output (Taproot)                              │
 //!   │                                                     │
-//!   │  Internal Key: MuSig2(owner, aegis_proxy)           │
+//!   │  Internal Key: MuSig2(owner, plimsoll_proxy)           │
 //!   │                                                     │
 //!   │  Script Path (fallback):                            │
 //!   │    Leaf 0: OP_CHECKSIGVERIFY(agent) OP_CHECKSIG(proxy)  │
@@ -20,7 +20,7 @@
 //!
 //! ### Key Path (Happy Path — Fastest)
 //!
-//! The internal key is a MuSig2 aggregate of `owner + aegis_proxy`.
+//! The internal key is a MuSig2 aggregate of `owner + plimsoll_proxy`.
 //! Both must cooperate to produce a valid Schnorr signature.  This is
 //! the most gas-efficient path — a single 64-byte signature on-chain.
 //!
@@ -28,7 +28,7 @@
 //!
 //! When an AI agent wants to spend:
 //! 1. Agent signs the PSBT with its Schnorr key.
-//! 2. Aegis proxy validates via 7 engines + Conservation of Mass.
+//! 2. Plimsoll proxy validates via 7 engines + Conservation of Mass.
 //! 3. Proxy co-signs with its Schnorr key.
 //! 4. Both signatures are revealed via the Taproot script path.
 //!
@@ -45,7 +45,7 @@
 //! ## Conservation of Mass (Off-Chain Enforcement)
 //!
 //! Before the proxy co-signs, it runs the UTXO guard
-//! (`aegis-rpc/src/utxo_guard.rs`) to verify:
+//! (`plimsoll-rpc/src/utxo_guard.rs`) to verify:
 //!
 //! ```text
 //!   Sum(Inputs) - Sum(Outputs) = Implicit Fee ≤ $50
@@ -62,14 +62,14 @@ use serde::{Deserialize, Serialize};
 /// Represents a participant's x-only public key (32 bytes, BIP-340).
 pub type XOnlyPubkey = [u8; 32];
 
-/// Configuration for the Aegis Bitcoin Taproot Vault.
+/// Configuration for the Plimsoll Bitcoin Taproot Vault.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaprootVaultConfig {
     /// Owner's x-only pubkey (recovery path).
     pub owner_pubkey: XOnlyPubkey,
     /// AI agent's x-only pubkey.
     pub agent_pubkey: XOnlyPubkey,
-    /// Aegis proxy's x-only pubkey (cosigner).
+    /// Plimsoll proxy's x-only pubkey (cosigner).
     pub proxy_pubkey: XOnlyPubkey,
     /// CSV timelock for owner recovery (in blocks, default 144 ≈ 24h).
     pub recovery_timelock_blocks: u16,
@@ -210,15 +210,15 @@ pub fn build_taproot_vault(config: &TaprootVaultConfig) -> TaprootVaultDescripto
     );
 
     // NUMS point (provably unspendable internal key).
-    // H = lift_x(SHA256("aegis-taproot-vault-nums"))
+    // H = lift_x(SHA256("plimsoll-taproot-vault-nums"))
     // This forces all spends through script paths where we can
     // enforce the 2-of-2 requirement.
     let nums_point: XOnlyPubkey = {
-        // SHA256("aegis-taproot-vault-nums") — precomputed.
+        // SHA256("plimsoll-taproot-vault-nums") — precomputed.
         // In production, use a proper NUMS derivation.
         let mut h = [0u8; 32];
         // Simple deterministic derivation for the placeholder
-        let seed = b"aegis-taproot-vault-nums-v2";
+        let seed = b"plimsoll-taproot-vault-nums-v2";
         for (i, byte) in seed.iter().enumerate() {
             h[i % 32] ^= byte;
         }
@@ -243,7 +243,7 @@ pub fn build_taproot_vault(config: &TaprootVaultConfig) -> TaprootVaultDescripto
             },
         ],
         summary: format!(
-            "Aegis Taproot Vault: 2-of-2 (agent+proxy) with {}-block owner recovery. \
+            "Plimsoll Taproot Vault: 2-of-2 (agent+proxy) with {}-block owner recovery. \
              Agent cannot spend without proxy co-signature. \
              Owner can recover after ~{} hours.",
             config.recovery_timelock_blocks,
@@ -252,7 +252,7 @@ pub fn build_taproot_vault(config: &TaprootVaultConfig) -> TaprootVaultDescripto
     }
 }
 
-/// Validate a PSBT against the Aegis Taproot Vault rules.
+/// Validate a PSBT against the Plimsoll Taproot Vault rules.
 ///
 /// This is the bridge between on-chain script enforcement and
 /// the off-chain Conservation of Mass engine.
@@ -285,7 +285,7 @@ pub fn validate_psbt_for_signing(
             format!(
                 "BLOCK_UTXO_FEE_EXCESSIVE: Conservation of Mass violation — \
                  implicit fee ${:.2} exceeds ${:.2} limit. \
-                 Aegis proxy will NOT co-sign this PSBT.",
+                 Plimsoll proxy will NOT co-sign this PSBT.",
                 fee_usd, max_fee_usd,
             ),
         );

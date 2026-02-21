@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from aegis.engines.evm_simulator import (
+from plimsoll.engines.evm_simulator import (
     EVMSimulatorEngine,
     EVMSimulatorConfig,
     SimulationResult,
 )
-from aegis.verdict import VerdictCode
+from plimsoll.verdict import VerdictCode
 
 
 def test_disabled_passthrough():
@@ -272,7 +272,7 @@ def test_check_order_revert_before_loss():
 
 
 def test_target_field_recognized():
-    """'target' field (Aegis convention) should trigger simulation."""
+    """'target' field (Plimsoll convention) should trigger simulation."""
     sim_called = []
 
     def spy_sim(payload):

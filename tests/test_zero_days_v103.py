@@ -14,11 +14,11 @@ from __future__ import annotations
 import time
 import unittest
 
-from aegis.verdict import VerdictCode
-from aegis.firewall import AegisConfig, AegisFirewall
-from aegis.enclave.vault import (
+from plimsoll.verdict import VerdictCode
+from plimsoll.firewall import PlimsollConfig, PlimsollFirewall
+from plimsoll.enclave.vault import (
     KeyVault,
-    AegisEnforcementError,
+    PlimsollEnforcementError,
     _compute_tvar,
     _compute_l1_data_fee,
     L2_CHAIN_IDS,
@@ -211,19 +211,19 @@ class TestTVARWithL1Fee(unittest.TestCase):
 
 
 class TestGasAnomalyDetection(unittest.TestCase):
-    """Test gas anomaly detection in AegisFirewall."""
+    """Test gas anomaly detection in PlimsollFirewall."""
 
-    def _make_firewall(self, **kwargs) -> AegisFirewall:
-        config = AegisConfig(
+    def _make_firewall(self, **kwargs) -> PlimsollFirewall:
+        config = PlimsollConfig(
             revert_strike_max=kwargs.get("revert_strike_max", 3),
             revert_strike_window_secs=kwargs.get("revert_strike_window_secs", 300.0),
             gas_anomaly_ratio=kwargs.get("gas_anomaly_ratio", 3.0),
         )
-        return AegisFirewall(config=config)
+        return PlimsollFirewall(config=config)
 
     def test_gas_anomaly_disabled_by_default(self) -> None:
         """Gas anomaly detection disabled when ratio=0."""
-        fw = AegisFirewall(config=AegisConfig(
+        fw = PlimsollFirewall(config=PlimsollConfig(
             revert_strike_max=3,
             gas_anomaly_ratio=0.0,
         ))
@@ -292,17 +292,17 @@ class TestBackwardCompatV103(unittest.TestCase):
 
     def test_chain_id_default_zero(self) -> None:
         """chain_id defaults to 0 (skip L1 fee computation)."""
-        config = AegisConfig()
+        config = PlimsollConfig()
         self.assertEqual(config.chain_id, 0)
 
     def test_gas_anomaly_ratio_default_zero(self) -> None:
         """gas_anomaly_ratio defaults to 0.0 (disabled)."""
-        config = AegisConfig()
+        config = PlimsollConfig()
         self.assertEqual(config.gas_anomaly_ratio, 0.0)
 
     def test_firewall_works_without_v103_config(self) -> None:
         """Firewall works normally with no v1.0.3 config."""
-        fw = AegisFirewall()
+        fw = PlimsollFirewall()
         verdict = fw.evaluate({"target": "0x1234", "amount": 1.0})
         self.assertTrue(verdict.allowed)
 
@@ -328,7 +328,7 @@ class TestV103Integration(unittest.TestCase):
 
     def test_gas_anomaly_and_revert_strikes_combined(self) -> None:
         """Gas anomalies and reverts share the same sever mechanism."""
-        fw = AegisFirewall(config=AegisConfig(
+        fw = PlimsollFirewall(config=PlimsollConfig(
             revert_strike_max=3,
             revert_strike_window_secs=300.0,
             gas_anomaly_ratio=2.0,
@@ -343,7 +343,7 @@ class TestV103Integration(unittest.TestCase):
 
     def test_l2_tvar_with_gas_anomaly(self) -> None:
         """L2 chain with gas anomaly detection both enabled."""
-        fw = AegisFirewall(config=AegisConfig(
+        fw = PlimsollFirewall(config=PlimsollConfig(
             chain_id=10,  # Optimism
             gas_anomaly_ratio=3.0,
             revert_strike_max=5,
@@ -356,7 +356,7 @@ class TestV103Integration(unittest.TestCase):
 
     def test_reset_clears_v103_state(self) -> None:
         """reset() clears all v1.0.3 state along with prior state."""
-        fw = AegisFirewall(config=AegisConfig(
+        fw = PlimsollFirewall(config=PlimsollConfig(
             revert_strike_max=5,
             gas_anomaly_ratio=2.0,
         ))

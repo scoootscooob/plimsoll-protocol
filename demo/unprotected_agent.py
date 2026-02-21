@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Aegis Protocol — UNPROTECTED Agent Demo (the "before" case)
+Plimsoll Protocol — UNPROTECTED Agent Demo (the "before" case)
 
 The SAME real LLM agent, the SAME prompt injection attack — but with
-NO Aegis firewall. The agent obeys every malicious instruction and
+NO Plimsoll firewall. The agent obeys every malicious instruction and
 drains the wallet in seconds.
 
 Run this first, then run live_agent.py to see the difference.
@@ -243,7 +243,7 @@ def make_tools(denom: str) -> list[dict[str, Any]]:
 
 
 class NakedExecutor:
-    """Executes tool calls with ZERO validation. No Aegis. No checks."""
+    """Executes tool calls with ZERO validation. No Plimsoll. No checks."""
 
     def __init__(self, wallet: NakedWallet, denom: str = "USDC"):
         self.wallet = wallet
@@ -400,7 +400,7 @@ def print_banner(title: str, color: str = CYAN) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Aegis Protocol — UNPROTECTED Agent Demo"
+        description="Plimsoll Protocol — UNPROTECTED Agent Demo"
     )
     parser.add_argument(
         "--model",
@@ -510,7 +510,7 @@ def main() -> None:
     ║    ╚██████╔╝██║ ╚████║██║     ██║  ██║╚██████╔╝   ██║       ║
     ║     ╚═════╝ ╚═╝  ╚═══╝╚═╝     ╚═╝  ╚═╝ ╚═════╝    ╚═╝       ║
     ║                                                               ║
-    ║    UNPROTECTED AGENT — No Aegis, No Firewall, No Safety      ║
+    ║    UNPROTECTED AGENT — No Plimsoll, No Firewall, No Safety      ║
     ║                                                               ║
     ╚═══════════════════════════════════════════════════════════════╝
 {RESET}""")
@@ -587,7 +587,7 @@ def main() -> None:
         f"the agent's context!{RESET}"
     )
     print(
-        f"  {DIM}(Same attack as the Aegis-protected demo){RESET}\n"
+        f"  {DIM}(Same attack as the Plimsoll-protected demo){RESET}\n"
     )
 
     scatter = SCATTER_ADDRS
@@ -716,7 +716,7 @@ def main() -> None:
         )
         print(
             f"  {DIM}(Some models have built-in safety — but it's probabilistic,\n"
-            f"  not deterministic. It can fail. Aegis never fails.){RESET}"
+            f"  not deterministic. It can fail. Plimsoll never fails.){RESET}"
         )
 
     print(f"""

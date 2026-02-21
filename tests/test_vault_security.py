@@ -3,7 +3,7 @@
 Flaw 1: Blind Vault (Inversion of Control)
 Flaw 2: EIP-1559 Gas Drain (TVAR)
 Flaw 3: Python RAM Forensics (Soft Enclave Wipe)
-Flaw 4: Nonce Desync (AegisEnforcementError)
+Flaw 4: Nonce Desync (PlimsollEnforcementError)
 """
 
 from __future__ import annotations
@@ -11,16 +11,16 @@ from __future__ import annotations
 import gc
 import pytest
 
-from aegis.enclave.vault import (
+from plimsoll.enclave.vault import (
     KeyVault,
-    AegisEnforcementError,
+    PlimsollEnforcementError,
     _compute_tvar,
-    _tx_dict_to_aegis_payload,
+    _tx_dict_to_plimsoll_payload,
     _secure_wipe,
 )
-from aegis.firewall import AegisFirewall, AegisConfig
-from aegis.engines.capital_velocity import CapitalVelocityConfig
-from aegis.verdict import VerdictCode
+from plimsoll.firewall import PlimsollFirewall, PlimsollConfig
+from plimsoll.engines.capital_velocity import CapitalVelocityConfig
+from plimsoll.verdict import VerdictCode
 
 
 # ── Helpers ──────────────────────────────────────────────────────────
@@ -62,14 +62,14 @@ class TestInversionOfControl:
     """The vault owns the firewall. RCE can't bypass it."""
 
     def test_firewall_auto_bound_on_init(self):
-        """AegisFirewall auto-binds to its vault on __post_init__."""
-        fw = AegisFirewall()
+        """PlimsollFirewall auto-binds to its vault on __post_init__."""
+        fw = PlimsollFirewall()
         assert fw.vault is not None
         assert fw.vault.has_firewall
 
     def test_vault_blocks_without_caller_check(self):
         """Even if the caller deletes their if-statement, the vault blocks."""
-        fw = AegisFirewall(config=AegisConfig(
+        fw = PlimsollFirewall(config=PlimsollConfig(
             velocity=CapitalVelocityConfig(max_single_amount=500),
         ))
         key_hex = _make_eth_key()
@@ -79,14 +79,14 @@ class TestInversionOfControl:
         tx = _make_tx_dict(value=1_000_000_000_000_000_000)  # 1 ETH in wei
 
         # The vault internally runs firewall.evaluate() and blocks
-        with pytest.raises(AegisEnforcementError) as exc_info:
+        with pytest.raises(PlimsollEnforcementError) as exc_info:
             fw.vault.sign_eth_transaction("test_key", tx, spend_amount=1000.0)
 
         assert "CapitalVelocity" in exc_info.value.engine or "BLOCK" in exc_info.value.code
 
     def test_vault_allows_legitimate_tx(self):
         """Legitimate transactions pass through vault + firewall."""
-        fw = AegisFirewall(config=AegisConfig(
+        fw = PlimsollFirewall(config=PlimsollConfig(
             velocity=CapitalVelocityConfig(
                 max_single_amount=10_000,
                 v_max=100_000,
@@ -115,16 +115,16 @@ class TestInversionOfControl:
     def test_cannot_rebind_firewall(self):
         """Once bound, the firewall cannot be swapped (prevents hot-swap attacks)."""
         vault = KeyVault()
-        fw1 = AegisFirewall(config=AegisConfig(enable_vault=False))
+        fw1 = PlimsollFirewall(config=PlimsollConfig(enable_vault=False))
         vault.bind_firewall(fw1)
 
-        fw2 = AegisFirewall(config=AegisConfig(enable_vault=False))
+        fw2 = PlimsollFirewall(config=PlimsollConfig(enable_vault=False))
         with pytest.raises(RuntimeError, match="already bound"):
             vault.bind_firewall(fw2)
 
     def test_enforcement_error_fields(self):
-        """AegisEnforcementError carries engine/reason/code for debugging."""
-        err = AegisEnforcementError(
+        """PlimsollEnforcementError carries engine/reason/code for debugging."""
+        err = PlimsollEnforcementError(
             reason="VELOCITY BREACH: PID output 5.2 > threshold 2.0",
             engine="CapitalVelocity",
             code="BLOCK_VELOCITY_BREACH",
@@ -132,7 +132,7 @@ class TestInversionOfControl:
         assert err.engine == "CapitalVelocity"
         assert "VELOCITY BREACH" in err.reason
         assert err.code == "BLOCK_VELOCITY_BREACH"
-        assert "AEGIS VAULT ENFORCEMENT" in str(err)
+        assert "PLIMSOLL VAULT ENFORCEMENT" in str(err)
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -176,7 +176,7 @@ class TestTVAR:
 
     def test_gas_drain_blocked_by_vault(self):
         """The gas drain attack is caught by TVAR → CapitalVelocity."""
-        fw = AegisFirewall(config=AegisConfig(
+        fw = PlimsollFirewall(config=PlimsollConfig(
             velocity=CapitalVelocityConfig(
                 max_single_amount=1_000_000,  # 1M wei max
             ),
@@ -193,16 +193,16 @@ class TestTVAR:
 
         # TVAR = 0 + 21000 * 500_000_000_000_000 = 10.5 quadrillion wei
         # This far exceeds max_single_amount=1M
-        with pytest.raises(AegisEnforcementError):
+        with pytest.raises(PlimsollEnforcementError):
             fw.vault.sign_eth_transaction("agent", tx)
 
 
 class TestTxDictToPayload:
-    """Ethereum tx dict → Aegis payload conversion."""
+    """Ethereum tx dict → Plimsoll payload conversion."""
 
     def test_basic_conversion(self):
         tx = _make_tx_dict(value=1000, gas=21000, max_fee=100, priority_fee=10)
-        payload = _tx_dict_to_aegis_payload(tx)
+        payload = _tx_dict_to_plimsoll_payload(tx)
         assert payload["target"] == tx["to"]
         assert payload["amount"] == 1000.0
         assert payload["gas"] == 21000
@@ -211,7 +211,7 @@ class TestTxDictToPayload:
 
     def test_missing_to(self):
         tx = {"value": 100}
-        payload = _tx_dict_to_aegis_payload(tx)
+        payload = _tx_dict_to_plimsoll_payload(tx)
         assert "target" not in payload
 
 
@@ -275,12 +275,12 @@ class TestSoftEnclaveWipe:
 # ═════════════════════════════════════════════════════════════════════
 
 
-class TestAegisEnforcementError:
-    """AegisEnforcementError enables graceful recovery (no crash, no desync)."""
+class TestPlimsollEnforcementError:
+    """PlimsollEnforcementError enables graceful recovery (no crash, no desync)."""
 
     def test_error_is_catchable(self):
         """The error can be caught without crashing the agent."""
-        fw = AegisFirewall(config=AegisConfig(
+        fw = PlimsollFirewall(config=PlimsollConfig(
             velocity=CapitalVelocityConfig(max_single_amount=100),
         ))
         key_hex = _make_eth_key()
@@ -291,10 +291,10 @@ class TestAegisEnforcementError:
         caught = False
         try:
             fw.vault.sign_eth_transaction("agent", tx, spend_amount=999.0)
-        except AegisEnforcementError as e:
+        except PlimsollEnforcementError as e:
             caught = True
             # The error message is suitable for injection into LLM context
-            assert "BLOCKED" in str(e) or "AEGIS" in str(e)
+            assert "BLOCKED" in str(e) or "PLIMSOLL" in str(e)
             assert e.engine is not None
             assert e.code is not None
 
@@ -302,7 +302,7 @@ class TestAegisEnforcementError:
 
     def test_firewall_state_unaffected_after_block(self):
         """After a vault block, the firewall state is clean for the next tx."""
-        fw = AegisFirewall(config=AegisConfig(
+        fw = PlimsollFirewall(config=PlimsollConfig(
             velocity=CapitalVelocityConfig(
                 max_single_amount=1000,
                 v_max=100_000,
@@ -313,7 +313,7 @@ class TestAegisEnforcementError:
 
         # Block a big tx
         big_tx = _make_tx_dict(value=999_999_999)
-        with pytest.raises(AegisEnforcementError):
+        with pytest.raises(PlimsollEnforcementError):
             fw.vault.sign_eth_transaction("agent", big_tx, spend_amount=5000.0)
 
         # Small tx should still work
@@ -323,7 +323,7 @@ class TestAegisEnforcementError:
 
     def test_error_preserves_reason_for_llm_feedback(self):
         """The error reason is detailed enough for LLM context injection."""
-        err = AegisEnforcementError(
+        err = PlimsollEnforcementError(
             reason="VELOCITY BREACH: PID output 5.2 > threshold 2.0",
             engine="CapitalVelocity",
             code="BLOCK_VELOCITY_BREACH",
@@ -345,7 +345,7 @@ class TestEndToEndSecurity:
 
     def test_full_pipeline_legitimate_tx(self):
         """Legit tx: firewall allows → vault signs → key wiped → raw returned."""
-        fw = AegisFirewall(config=AegisConfig(
+        fw = PlimsollFirewall(config=PlimsollConfig(
             velocity=CapitalVelocityConfig(
                 max_single_amount=10_000_000,
                 v_max=100_000_000,
@@ -364,7 +364,7 @@ class TestEndToEndSecurity:
 
     def test_full_pipeline_gas_drain_blocked(self):
         """Gas drain: TVAR catches high gas → firewall blocks → key NEVER decrypted."""
-        fw = AegisFirewall(config=AegisConfig(
+        fw = PlimsollFirewall(config=PlimsollConfig(
             velocity=CapitalVelocityConfig(max_single_amount=1_000_000),
         ))
         key_hex = _make_eth_key()
@@ -373,7 +373,7 @@ class TestEndToEndSecurity:
         # Gas drain: value=0 but maxFeePerGas is astronomical
         tx = _make_tx_dict(value=0, max_fee=999_999_999_999_999)
 
-        with pytest.raises(AegisEnforcementError) as exc:
+        with pytest.raises(PlimsollEnforcementError) as exc:
             fw.vault.sign_eth_transaction("agent", tx)
 
         assert exc.value.engine is not None
@@ -382,7 +382,7 @@ class TestEndToEndSecurity:
         """Multiple legit txs succeed, proving vault state is clean between calls."""
         from eth_account import Account as EthAccount
 
-        fw = AegisFirewall(config=AegisConfig(
+        fw = PlimsollFirewall(config=PlimsollConfig(
             velocity=CapitalVelocityConfig(
                 max_single_amount=10_000_000,
                 v_max=100_000_000,

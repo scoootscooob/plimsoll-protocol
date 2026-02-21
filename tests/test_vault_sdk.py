@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from aegis.vault.rpc_proxy import AegisRPCProxy, RPCProxyConfig
-from aegis.vault.smart_vault import SmartVaultClient, SmartVaultConfig, VAULT_ABI
+from plimsoll.vault.rpc_proxy import PlimsollRPCProxy, RPCProxyConfig
+from plimsoll.vault.smart_vault import SmartVaultClient, SmartVaultConfig, VAULT_ABI
 
 
 # ── RPC Proxy client tests ───────────────────────────────────────
@@ -11,25 +11,25 @@ from aegis.vault.smart_vault import SmartVaultClient, SmartVaultConfig, VAULT_AB
 
 def test_rpc_proxy_default_config():
     """Default config should point to localhost:8545."""
-    proxy = AegisRPCProxy()
+    proxy = PlimsollRPCProxy()
     assert proxy.config.proxy_url == "http://localhost:8545"
     assert proxy.config.timeout_seconds == 30.0
 
 
 def test_rpc_proxy_custom_config():
     """Custom config should be respected."""
-    proxy = AegisRPCProxy(config=RPCProxyConfig(
-        proxy_url="https://rpc.aegis.network",
+    proxy = PlimsollRPCProxy(config=RPCProxyConfig(
+        proxy_url="https://rpc.plimsoll.network",
         api_key="test-key",
         timeout_seconds=60.0,
     ))
-    assert proxy.config.proxy_url == "https://rpc.aegis.network"
+    assert proxy.config.proxy_url == "https://rpc.plimsoll.network"
     assert proxy.config.api_key == "test-key"
 
 
 def test_rpc_proxy_health_check_offline():
     """Health check on unreachable server should return False."""
-    proxy = AegisRPCProxy(config=RPCProxyConfig(
+    proxy = PlimsollRPCProxy(config=RPCProxyConfig(
         proxy_url="http://localhost:9999",  # Nothing here
     ))
     assert proxy.health_check() is False
@@ -37,7 +37,7 @@ def test_rpc_proxy_health_check_offline():
 
 def test_rpc_proxy_request_id_increments():
     """Request IDs should auto-increment."""
-    proxy = AegisRPCProxy()
+    proxy = PlimsollRPCProxy()
     assert proxy._request_id == 0
     proxy._request_id += 1
     assert proxy._request_id == 1

@@ -1,4 +1,4 @@
-//! Aegis Bitcoin Contracts — Taproot Vault and PSBT enforcement.
+//! Plimsoll Bitcoin Contracts — Taproot Vault and PSBT enforcement.
 //!
 //! This crate provides:
 //! - `taproot_vault`: P2TR 2-of-2 multisig with CSV owner recovery

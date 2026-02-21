@@ -1,11 +1,11 @@
 [package]
-name = "aegis-indexer"
+name = "plimsoll-indexer"
 version = "2.0.0"
 edition = "2021"
-description = "Aegis Fleet Indexer — multi-chain event indexer for the enterprise dashboard"
+description = "Plimsoll Fleet Indexer — multi-chain event indexer for the enterprise dashboard"
 
 [[bin]]
-name = "aegis-indexer"
+name = "plimsoll-indexer"
 path = "src/main.rs"
 
 [dependencies]

@@ -1,29 +1,29 @@
-"""Tests for the ``@aegis_tool`` LangChain integration decorator."""
+"""Tests for the ``@plimsoll_tool`` LangChain integration decorator."""
 
 from __future__ import annotations
 
 import pytest
 
-from aegis.firewall import AegisFirewall, AegisConfig
-from aegis.engines.capital_velocity import CapitalVelocityConfig
-from aegis.engines.trajectory_hash import TrajectoryHashConfig
-from aegis.integrations.langchain import aegis_tool
-from aegis.verdict import VerdictCode
+from plimsoll.firewall import PlimsollFirewall, PlimsollConfig
+from plimsoll.engines.capital_velocity import CapitalVelocityConfig
+from plimsoll.engines.trajectory_hash import TrajectoryHashConfig
+from plimsoll.integrations.langchain import plimsoll_tool
+from plimsoll.verdict import VerdictCode
 
 
-def _make_firewall(**kwargs: object) -> AegisFirewall:
-    return AegisFirewall(config=AegisConfig(**kwargs))
+def _make_firewall(**kwargs: object) -> PlimsollFirewall:
+    return PlimsollFirewall(config=PlimsollConfig(**kwargs))
 
 
 # ────────────────────────────────────────────────────────────────────
 
-class TestAegisTool:
-    """@aegis_tool decorator for LangChain."""
+class TestPlimsollTool:
+    """@plimsoll_tool decorator for LangChain."""
 
     def test_allows_clean_call(self) -> None:
         fw = _make_firewall(velocity=CapitalVelocityConfig(v_max=100.0))
 
-        @aegis_tool(fw, spend_key="amount")
+        @plimsoll_tool(fw, spend_key="amount")
         def transfer(payload: dict) -> str:
             return "ok"
 
@@ -35,7 +35,7 @@ class TestAegisTool:
             velocity=CapitalVelocityConfig(v_max=0.001, max_single_amount=5.0)
         )
 
-        @aegis_tool(fw, spend_key="amount")
+        @plimsoll_tool(fw, spend_key="amount")
         def transfer(payload: dict) -> str:
             return "ok"
 
@@ -52,7 +52,7 @@ class TestAegisTool:
         def my_handler(verdict):
             return f"CUSTOM BLOCK: {verdict.code.value}"
 
-        @aegis_tool(fw, spend_key="amount", on_block=my_handler)
+        @plimsoll_tool(fw, spend_key="amount", on_block=my_handler)
         def transfer(payload: dict) -> str:
             return "ok"
 
@@ -64,7 +64,7 @@ class TestAegisTool:
         fw = _make_firewall()
         calls = []
 
-        @aegis_tool(fw, spend_key="amount")
+        @plimsoll_tool(fw, spend_key="amount")
         def transfer(payload: dict) -> str:
             calls.append(payload)
             return "ok"
@@ -78,7 +78,7 @@ class TestAegisTool:
         fw = _make_firewall()
         calls = []
 
-        @aegis_tool(fw, spend_key="amount")
+        @plimsoll_tool(fw, spend_key="amount")
         def transfer(**kwargs) -> str:
             calls.append(kwargs)
             return "ok"
@@ -90,16 +90,16 @@ class TestAegisTool:
     def test_exposes_firewall_attribute(self) -> None:
         fw = _make_firewall()
 
-        @aegis_tool(fw)
+        @plimsoll_tool(fw)
         def transfer(payload: dict) -> str:
             return "ok"
 
-        assert transfer.aegis_firewall is fw
+        assert transfer.plimsoll_firewall is fw
 
     def test_preserves_function_name(self) -> None:
         fw = _make_firewall()
 
-        @aegis_tool(fw)
+        @plimsoll_tool(fw)
         def my_special_transfer(payload: dict) -> str:
             """Transfer tokens."""
             return "ok"

@@ -1,4 +1,4 @@
-"""Tests for the ``aegis.oracles.price_feed`` module."""
+"""Tests for the ``plimsoll.oracles.price_feed`` module."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import time
 
 import pytest
 
-from aegis.oracles.price_feed import PriceFeed, PriceFeedConfig, PriceQuote
+from plimsoll.oracles.price_feed import PriceFeed, PriceFeedConfig, PriceQuote
 
 
 class TestPriceFeedFallbacks:

@@ -1,0 +1,51 @@
+# ============================================================
+# Plimsoll RPC Proxy — Docker Compose
+#
+# Usage:
+#   cp .env.example .env
+#   docker compose up -d
+#
+# Architecture:
+#   plimsoll-rpc:8545 ← AI Agent sends txs here
+#        │
+#        ├── Pre-flight simulation (revm fork)
+#        ├── Physics enforcement
+#        ├── Fee collection (1-2 bps)
+#        └── MEV-shielded routing (Flashbots Protect)
+#             │
+#             └── Upstream Ethereum RPC (Alchemy/Infura)
+# ============================================================
+
+services:
+  plimsoll-rpc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${PLIMSOLL_PORT:-8545}:8545"
+    environment:
+      - PLIMSOLL_UPSTREAM_RPC=${PLIMSOLL_UPSTREAM_RPC:-https://eth-mainnet.g.alchemy.com/v2/demo}
+      - PLIMSOLL_HOST=0.0.0.0
+      - PLIMSOLL_PORT=8545
+      - PLIMSOLL_FEE_BPS=${PLIMSOLL_FEE_BPS:-2}
+      - PLIMSOLL_FEE_COLLECTOR=${PLIMSOLL_FEE_COLLECTOR:-0x0000000000000000000000000000000000000000}
+      - PLIMSOLL_MAX_LOSS_PCT=${PLIMSOLL_MAX_LOSS_PCT:-20.0}
+      - PLIMSOLL_BLOCK_APPROVALS=${PLIMSOLL_BLOCK_APPROVALS:-true}
+      - PLIMSOLL_FLASHBOTS_ENABLED=${PLIMSOLL_FLASHBOTS_ENABLED:-false}
+      - PLIMSOLL_FLASHBOTS_RELAY=${PLIMSOLL_FLASHBOTS_RELAY:-https://relay.flashbots.net}
+      - PLIMSOLL_FORK_BLOCK=${PLIMSOLL_FORK_BLOCK:-0}
+      - RUST_LOG=${RUST_LOG:-plimsoll_rpc=info,tower_http=debug}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8545/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2"
+        reservations:
+          memory: 512M
+          cpus: "0.5"

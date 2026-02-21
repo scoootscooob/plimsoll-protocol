@@ -1,19 +1,19 @@
 "use client";
 
 /**
- * Custom hooks for interacting with AegisVault contracts.
+ * Custom hooks for interacting with PlimsollVault contracts.
  */
 
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { parseEther, formatEther, type Address } from "viem";
-import { AEGIS_VAULT_ABI, AEGIS_ATTESTATION_ABI, CONTRACTS } from "@/lib/contracts";
+import { PLIMSOLL_VAULT_ABI, PLIMSOLL_ATTESTATION_ABI, CONTRACTS } from "@/lib/contracts";
 
 // ── Read Hooks ───────────────────────────────────────────────
 
 export function useVaultBalance(vaultAddress: Address) {
   return useReadContract({
     address: vaultAddress,
-    abi: AEGIS_VAULT_ABI,
+    abi: PLIMSOLL_VAULT_ABI,
     functionName: "vaultBalance",
   });
 }
@@ -21,7 +21,7 @@ export function useVaultBalance(vaultAddress: Address) {
 export function useVaultOwner(vaultAddress: Address) {
   return useReadContract({
     address: vaultAddress,
-    abi: AEGIS_VAULT_ABI,
+    abi: PLIMSOLL_VAULT_ABI,
     functionName: "owner",
   });
 }
@@ -29,7 +29,7 @@ export function useVaultOwner(vaultAddress: Address) {
 export function useInitialBalance(vaultAddress: Address) {
   return useReadContract({
     address: vaultAddress,
-    abi: AEGIS_VAULT_ABI,
+    abi: PLIMSOLL_VAULT_ABI,
     functionName: "initialBalance",
   });
 }
@@ -37,7 +37,7 @@ export function useInitialBalance(vaultAddress: Address) {
 export function useEmergencyLocked(vaultAddress: Address) {
   return useReadContract({
     address: vaultAddress,
-    abi: AEGIS_VAULT_ABI,
+    abi: PLIMSOLL_VAULT_ABI,
     functionName: "emergencyLocked",
   });
 }
@@ -45,7 +45,7 @@ export function useEmergencyLocked(vaultAddress: Address) {
 export function useSessionActive(vaultAddress: Address, agentAddress: Address) {
   return useReadContract({
     address: vaultAddress,
-    abi: AEGIS_VAULT_ABI,
+    abi: PLIMSOLL_VAULT_ABI,
     functionName: "isSessionActive",
     args: [agentAddress],
   });
@@ -54,7 +54,7 @@ export function useSessionActive(vaultAddress: Address, agentAddress: Address) {
 export function useSessionKey(vaultAddress: Address, agentAddress: Address) {
   return useReadContract({
     address: vaultAddress,
-    abi: AEGIS_VAULT_ABI,
+    abi: PLIMSOLL_VAULT_ABI,
     functionName: "getSessionKey",
     args: [agentAddress],
   });
@@ -63,17 +63,17 @@ export function useSessionKey(vaultAddress: Address, agentAddress: Address) {
 export function useModuleAddresses(vaultAddress: Address) {
   const velocity = useReadContract({
     address: vaultAddress,
-    abi: AEGIS_VAULT_ABI,
+    abi: PLIMSOLL_VAULT_ABI,
     functionName: "velocityModule",
   });
   const whitelist = useReadContract({
     address: vaultAddress,
-    abi: AEGIS_VAULT_ABI,
+    abi: PLIMSOLL_VAULT_ABI,
     functionName: "whitelistModule",
   });
   const drawdown = useReadContract({
     address: vaultAddress,
-    abi: AEGIS_VAULT_ABI,
+    abi: PLIMSOLL_VAULT_ABI,
     functionName: "drawdownModule",
   });
   return { velocity, whitelist, drawdown };
@@ -88,7 +88,7 @@ export function useDeposit() {
   const deposit = (vaultAddress: Address, amountEth: string) => {
     writeContract({
       address: vaultAddress,
-      abi: AEGIS_VAULT_ABI,
+      abi: PLIMSOLL_VAULT_ABI,
       functionName: "deposit",
       value: parseEther(amountEth),
     });
@@ -104,7 +104,7 @@ export function useWithdraw() {
   const withdraw = (vaultAddress: Address, to: Address, amountEth: string) => {
     writeContract({
       address: vaultAddress,
-      abi: AEGIS_VAULT_ABI,
+      abi: PLIMSOLL_VAULT_ABI,
       functionName: "withdraw",
       args: [to, parseEther(amountEth)],
     });
@@ -126,7 +126,7 @@ export function useIssueSessionKey() {
   ) => {
     writeContract({
       address: vaultAddress,
-      abi: AEGIS_VAULT_ABI,
+      abi: PLIMSOLL_VAULT_ABI,
       functionName: "issueSessionKey",
       args: [
         agent,
@@ -147,7 +147,7 @@ export function useRevokeSessionKey() {
   const revokeKey = (vaultAddress: Address, agent: Address) => {
     writeContract({
       address: vaultAddress,
-      abi: AEGIS_VAULT_ABI,
+      abi: PLIMSOLL_VAULT_ABI,
       functionName: "revokeSessionKey",
       args: [agent],
     });
@@ -163,7 +163,7 @@ export function useEmergencyLock() {
   const lock = (vaultAddress: Address) => {
     writeContract({
       address: vaultAddress,
-      abi: AEGIS_VAULT_ABI,
+      abi: PLIMSOLL_VAULT_ABI,
       functionName: "emergencyLockVault",
     });
   };
@@ -171,7 +171,7 @@ export function useEmergencyLock() {
   const unlock = (vaultAddress: Address) => {
     writeContract({
       address: vaultAddress,
-      abi: AEGIS_VAULT_ABI,
+      abi: PLIMSOLL_VAULT_ABI,
       functionName: "emergencyUnlock",
     });
   };
@@ -184,7 +184,7 @@ export function useEmergencyLock() {
 export function useAttestation(attestationAddress: Address, vaultAddress: Address) {
   return useReadContract({
     address: attestationAddress,
-    abi: AEGIS_ATTESTATION_ABI,
+    abi: PLIMSOLL_ATTESTATION_ABI,
     functionName: "getAttestation",
     args: [vaultAddress],
   });
@@ -193,7 +193,7 @@ export function useAttestation(attestationAddress: Address, vaultAddress: Addres
 export function useIsAttested(attestationAddress: Address, vaultAddress: Address) {
   return useReadContract({
     address: attestationAddress,
-    abi: AEGIS_ATTESTATION_ABI,
+    abi: PLIMSOLL_ATTESTATION_ABI,
     functionName: "isAttested",
     args: [vaultAddress],
   });

@@ -1,6 +1,6 @@
-//! Aegis Fleet Indexer — Multi-Chain Event Indexer.
+//! Plimsoll Fleet Indexer — Multi-Chain Event Indexer.
 //!
-//! High-speed indexer that listens globally for Aegis vault events across
+//! High-speed indexer that listens globally for Plimsoll vault events across
 //! Ethereum, Base, Arbitrum, Polygon, and Solana.  Pipes events into a
 //! PostgreSQL database so the React dashboard can load 5,000 agents in
 //! 40 milliseconds.
@@ -12,7 +12,7 @@
 //!   │                    CHAIN LISTENERS                        │
 //!   │                                                          │
 //!   │  EVM Listener (Ethereum, Base, Arbitrum, Polygon)        │
-//!   │    → WebSocket subscription to AegisVault events         │
+//!   │    → WebSocket subscription to PlimsollVault events         │
 //!   │    → eth_getLogs for historical backfill                  │
 //!   │                                                          │
 //!   │  Solana Listener                                         │
@@ -33,7 +33,7 @@
 //!   ┌──────────────────▼───────────────────────────────────────┐
 //!   │                    POSTGRESQL                             │
 //!   │                                                          │
-//!   │  aegis_events  — partitioned by chain_id                 │
+//!   │  plimsoll_events  — partitioned by chain_id                 │
 //!   │  agent_stats   — materialized view (real-time rollup)    │
 //!   │  vault_state   — latest state snapshot per vault         │
 //!   │                                                          │
@@ -60,7 +60,7 @@ async fn main() {
     tracing_subscriber::fmt::init();
 
     let config = IndexerConfig::from_env();
-    info!("Aegis Fleet Indexer v2.0 starting");
+    info!("Plimsoll Fleet Indexer v2.0 starting");
     info!("Chains: {:?}", config.chains.iter().map(|c| &c.name).collect::<Vec<_>>());
 
     let processor = Arc::new(EventProcessor::new(config.database_url.clone()));

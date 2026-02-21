@@ -40,7 +40,7 @@ export function SessionKeyManager({ vaultAddress }: Props) {
 
       {/* Issue Session Key */}
       <div className="space-y-3 mb-6">
-        <h4 className="text-sm font-medium text-aegis-400">
+        <h4 className="text-sm font-medium text-plimsoll-400">
           Issue Session Key
         </h4>
         <input
@@ -117,7 +117,7 @@ export function SessionKeyManager({ vaultAddress }: Props) {
 
       {/* Query / Revoke Session */}
       <div className="space-y-3 border-t border-gray-700 pt-4">
-        <h4 className="text-sm font-medium text-aegis-400">
+        <h4 className="text-sm font-medium text-plimsoll-400">
           Query / Revoke Agent Session
         </h4>
         <div className="flex gap-2">

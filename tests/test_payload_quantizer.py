@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from aegis.engines.payload_quantizer import (
+from plimsoll.engines.payload_quantizer import (
     PayloadQuantizerEngine,
     PayloadQuantizerConfig,
 )
-from aegis.verdict import VerdictCode
+from plimsoll.verdict import VerdictCode
 
 
 def test_disabled_passthrough():

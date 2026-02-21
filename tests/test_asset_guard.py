@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from aegis.engines.asset_guard import (
+from plimsoll.engines.asset_guard import (
     AssetGuardEngine,
     AssetGuardConfig,
     OracleResult,
 )
-from aegis.verdict import VerdictCode
+from plimsoll.verdict import VerdictCode
 
 
 def test_passthrough_no_swap_fields():

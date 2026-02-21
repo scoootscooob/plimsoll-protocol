@@ -1,16 +1,16 @@
-"""Integration tests for the AegisFirewall orchestrator."""
+"""Integration tests for the PlimsollFirewall orchestrator."""
 
 import time
 
-from aegis.firewall import AegisFirewall, AegisConfig
-from aegis.engines.trajectory_hash import TrajectoryHashConfig
-from aegis.engines.capital_velocity import CapitalVelocityConfig
-from aegis.engines.entropy_guard import EntropyGuardConfig
-from aegis.verdict import VerdictCode
+from plimsoll.firewall import PlimsollFirewall, PlimsollConfig
+from plimsoll.engines.trajectory_hash import TrajectoryHashConfig
+from plimsoll.engines.capital_velocity import CapitalVelocityConfig
+from plimsoll.engines.entropy_guard import EntropyGuardConfig
+from plimsoll.verdict import VerdictCode
 
 
-def _make_firewall(**kwargs) -> AegisFirewall:
-    return AegisFirewall(config=AegisConfig(**kwargs))
+def _make_firewall(**kwargs) -> PlimsollFirewall:
+    return PlimsollFirewall(config=PlimsollConfig(**kwargs))
 
 
 def test_clean_payload_passes_all_engines():

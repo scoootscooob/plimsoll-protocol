@@ -14,11 +14,11 @@ from __future__ import annotations
 import time
 import unittest
 
-from aegis.verdict import VerdictCode
-from aegis.firewall import AegisConfig, AegisFirewall
-from aegis.enclave.vault import (
+from plimsoll.verdict import VerdictCode
+from plimsoll.firewall import PlimsollConfig, PlimsollFirewall
+from plimsoll.enclave.vault import (
     KeyVault,
-    AegisEnforcementError,
+    PlimsollEnforcementError,
     _compute_tvar,
     _TEMPORAL_BOUND_FIELDS,
     _UINT256_MAX,
@@ -103,13 +103,13 @@ class TestBundlerIllusionConfig(unittest.TestCase):
     """Kill-Shot 1: Bundler address configuration tests."""
 
     def test_bundler_address_not_in_python_config(self) -> None:
-        """bundler_address is Rust-only — no Python AegisConfig field needed."""
-        config = AegisConfig()
+        """bundler_address is Rust-only — no Python PlimsollConfig field needed."""
+        config = PlimsollConfig()
         self.assertFalse(hasattr(config, "bundler_address"))
 
     def test_firewall_works_without_bundler_config(self) -> None:
         """Firewall operates normally without any bundler configuration."""
-        fw = AegisFirewall()
+        fw = PlimsollFirewall()
         verdict = fw.evaluate({"target": "0x1234", "amount": 1.0})
         self.assertTrue(verdict.allowed)
 
@@ -195,16 +195,16 @@ class TestPVGInTVAR(unittest.TestCase):
 
 
 class TestPVGFirewallConfig(unittest.TestCase):
-    """Kill-Shot 2: PVG configuration in Python AegisConfig."""
+    """Kill-Shot 2: PVG configuration in Python PlimsollConfig."""
 
     def test_max_pvg_default_zero(self) -> None:
         """max_pre_verification_gas defaults to 0 (disabled)."""
-        config = AegisConfig()
+        config = PlimsollConfig()
         self.assertEqual(config.max_pre_verification_gas, 0)
 
     def test_max_pvg_can_be_set(self) -> None:
         """max_pre_verification_gas can be configured."""
-        config = AegisConfig(max_pre_verification_gas=500_000)
+        config = PlimsollConfig(max_pre_verification_gas=500_000)
         self.assertEqual(config.max_pre_verification_gas, 500_000)
 
 
@@ -222,7 +222,7 @@ class TestBridgeRefundHijack(unittest.TestCase):
 
     def test_bridge_config_not_in_python(self) -> None:
         """Bridge refund check is Rust-only — no Python config needed."""
-        config = AegisConfig()
+        config = PlimsollConfig()
         self.assertFalse(hasattr(config, "bridge_refund_check"))
 
     def test_arbitrum_selector_constant(self) -> None:
@@ -322,8 +322,8 @@ class TestPermitTemporalBoundsValidation(unittest.TestCase):
 
     def _make_vault_with_firewall(self, max_permit_secs: int = 3600) -> KeyVault:
         """Create a KeyVault with firewall enforcing temporal bounds."""
-        config = AegisConfig(max_permit_duration_secs=max_permit_secs)
-        fw = AegisFirewall(config=config)
+        config = PlimsollConfig(max_permit_duration_secs=max_permit_secs)
+        fw = PlimsollFirewall(config=config)
         vault = KeyVault()
         vault.bind_firewall(fw)
         return vault
@@ -331,7 +331,7 @@ class TestPermitTemporalBoundsValidation(unittest.TestCase):
     def test_immortal_deadline_rejected(self) -> None:
         """uint256.max deadline → BLOCK_PERMIT_IMMORTAL_SIGNATURE."""
         vault = self._make_vault_with_firewall(3600)
-        with self.assertRaises(AegisEnforcementError) as ctx:
+        with self.assertRaises(PlimsollEnforcementError) as ctx:
             vault._validate_permit_temporal_bounds(
                 {"deadline": _UINT256_MAX}, 3600,
             )
@@ -340,7 +340,7 @@ class TestPermitTemporalBoundsValidation(unittest.TestCase):
     def test_immortal_expiration_rejected(self) -> None:
         """uint256.max expiration field also caught."""
         vault = self._make_vault_with_firewall(3600)
-        with self.assertRaises(AegisEnforcementError):
+        with self.assertRaises(PlimsollEnforcementError):
             vault._validate_permit_temporal_bounds(
                 {"expiration": _UINT256_MAX}, 3600,
             )
@@ -349,7 +349,7 @@ class TestPermitTemporalBoundsValidation(unittest.TestCase):
         """uint256.max as hex string is also caught."""
         vault = self._make_vault_with_firewall(3600)
         max_hex = "0x" + "ff" * 32
-        with self.assertRaises(AegisEnforcementError) as ctx:
+        with self.assertRaises(PlimsollEnforcementError) as ctx:
             vault._validate_permit_temporal_bounds(
                 {"deadline": max_hex}, 3600,
             )
@@ -359,7 +359,7 @@ class TestPermitTemporalBoundsValidation(unittest.TestCase):
         """Deadline 7 days from now exceeds 1-hour max → rejected."""
         vault = self._make_vault_with_firewall(3600)
         future_7d = int(time.time()) + 7 * 86400
-        with self.assertRaises(AegisEnforcementError) as ctx:
+        with self.assertRaises(PlimsollEnforcementError) as ctx:
             vault._validate_permit_temporal_bounds(
                 {"deadline": future_7d}, 3600,
             )
@@ -387,7 +387,7 @@ class TestPermitTemporalBoundsValidation(unittest.TestCase):
         ok_time = int(time.time()) + 1800
         bad_time = int(time.time()) + 7 * 86400
         # First field OK, second exceeds
-        with self.assertRaises(AegisEnforcementError):
+        with self.assertRaises(PlimsollEnforcementError):
             vault._validate_permit_temporal_bounds(
                 {"deadline": ok_time, "sigDeadline": bad_time}, 3600,
             )
@@ -395,7 +395,7 @@ class TestPermitTemporalBoundsValidation(unittest.TestCase):
     def test_sig_deadline_field_caught(self) -> None:
         """sigDeadline (Permit2-specific) is detected."""
         vault = self._make_vault_with_firewall(3600)
-        with self.assertRaises(AegisEnforcementError):
+        with self.assertRaises(PlimsollEnforcementError):
             vault._validate_permit_temporal_bounds(
                 {"sigDeadline": _UINT256_MAX}, 3600,
             )
@@ -403,7 +403,7 @@ class TestPermitTemporalBoundsValidation(unittest.TestCase):
     def test_expiry_field_caught(self) -> None:
         """DAI-style 'expiry' field is detected."""
         vault = self._make_vault_with_firewall(3600)
-        with self.assertRaises(AegisEnforcementError):
+        with self.assertRaises(PlimsollEnforcementError):
             vault._validate_permit_temporal_bounds(
                 {"expiry": _UINT256_MAX}, 3600,
             )
@@ -411,7 +411,7 @@ class TestPermitTemporalBoundsValidation(unittest.TestCase):
     def test_valid_before_field_caught(self) -> None:
         """ERC-3009 'validBefore' field is detected."""
         vault = self._make_vault_with_firewall(3600)
-        with self.assertRaises(AegisEnforcementError):
+        with self.assertRaises(PlimsollEnforcementError):
             vault._validate_permit_temporal_bounds(
                 {"validBefore": _UINT256_MAX}, 3600,
             )
@@ -423,17 +423,17 @@ class TestPermitTemporalBoundsValidation(unittest.TestCase):
         _validate_permit_temporal_bounds(). The method itself always
         checks immortal signatures when called directly.
         """
-        config = AegisConfig(max_permit_duration_secs=0)
-        fw = AegisFirewall(config=config)
+        config = PlimsollConfig(max_permit_duration_secs=0)
+        fw = PlimsollFirewall(config=config)
         vault = KeyVault()
         vault.bind_firewall(fw)
         # Direct call with max_duration > 0 still catches immortal
-        with self.assertRaises(AegisEnforcementError):
+        with self.assertRaises(PlimsollEnforcementError):
             vault._validate_permit_temporal_bounds(
                 {"deadline": _UINT256_MAX}, 1,
             )
         # Immortal detection is always active even with 0 (safety net)
-        with self.assertRaises(AegisEnforcementError):
+        with self.assertRaises(PlimsollEnforcementError):
             vault._validate_permit_temporal_bounds(
                 {"deadline": _UINT256_MAX}, 0,
             )
@@ -477,12 +477,12 @@ class TestPermitDurationConfig(unittest.TestCase):
 
     def test_max_permit_duration_default_zero(self) -> None:
         """max_permit_duration_secs defaults to 0 (disabled)."""
-        config = AegisConfig()
+        config = PlimsollConfig()
         self.assertEqual(config.max_permit_duration_secs, 0)
 
     def test_max_permit_duration_can_be_set(self) -> None:
         """max_permit_duration_secs can be configured."""
-        config = AegisConfig(max_permit_duration_secs=7200)
+        config = PlimsollConfig(max_permit_duration_secs=7200)
         self.assertEqual(config.max_permit_duration_secs, 7200)
 
 
@@ -496,13 +496,13 @@ class TestBackwardCompatV104(unittest.TestCase):
 
     def test_all_v104_configs_default_disabled(self) -> None:
         """All v1.0.4 Python config fields default to disabled."""
-        config = AegisConfig()
+        config = PlimsollConfig()
         self.assertEqual(config.max_pre_verification_gas, 0)
         self.assertEqual(config.max_permit_duration_secs, 0)
 
     def test_firewall_works_without_v104_config(self) -> None:
         """Firewall evaluates normally with no v1.0.4 config."""
-        fw = AegisFirewall()
+        fw = PlimsollFirewall()
         verdict = fw.evaluate({"target": "0x1234", "amount": 1.0})
         self.assertTrue(verdict.allowed)
 
@@ -536,11 +536,11 @@ class TestV104Integration(unittest.TestCase):
 
     def test_pvg_and_permit_config_together(self) -> None:
         """PVG ceiling and permit duration can be configured together."""
-        config = AegisConfig(
+        config = PlimsollConfig(
             max_pre_verification_gas=500_000,
             max_permit_duration_secs=3600,
         )
-        fw = AegisFirewall(config=config)
+        fw = PlimsollFirewall(config=config)
         self.assertEqual(fw.config.max_pre_verification_gas, 500_000)
         self.assertEqual(fw.config.max_permit_duration_secs, 3600)
         # Should still evaluate normally for regular transactions
@@ -549,11 +549,11 @@ class TestV104Integration(unittest.TestCase):
 
     def test_pvg_tvar_with_permit_bounds_combined(self) -> None:
         """TVAR with PVG + temporal bounds validation both work."""
-        config = AegisConfig(
+        config = PlimsollConfig(
             max_pre_verification_gas=500_000,
             max_permit_duration_secs=3600,
         )
-        fw = AegisFirewall(config=config)
+        fw = PlimsollFirewall(config=config)
         vault = KeyVault()
         vault.bind_firewall(fw)
 
@@ -568,21 +568,21 @@ class TestV104Integration(unittest.TestCase):
         self.assertGreater(tvar, 0)
 
         # Temporal bounds still enforced
-        with self.assertRaises(AegisEnforcementError):
+        with self.assertRaises(PlimsollEnforcementError):
             vault._validate_permit_temporal_bounds(
                 {"deadline": _UINT256_MAX}, 3600,
             )
 
     def test_v104_with_v103_features(self) -> None:
         """v1.0.4 features coexist with v1.0.3 gas anomaly detection."""
-        config = AegisConfig(
+        config = PlimsollConfig(
             chain_id=10,  # Optimism
             gas_anomaly_ratio=3.0,
             revert_strike_max=5,
             max_pre_verification_gas=500_000,
             max_permit_duration_secs=3600,
         )
-        fw = AegisFirewall(config=config)
+        fw = PlimsollFirewall(config=config)
         self.assertEqual(fw.config.chain_id, 10)
         self.assertEqual(fw.config.max_pre_verification_gas, 500_000)
         self.assertEqual(fw.config.max_permit_duration_secs, 3600)
@@ -593,13 +593,13 @@ class TestV104Integration(unittest.TestCase):
 
     def test_reset_preserves_v104_config(self) -> None:
         """reset() clears state but preserves v1.0.4 config."""
-        config = AegisConfig(
+        config = PlimsollConfig(
             max_pre_verification_gas=500_000,
             max_permit_duration_secs=3600,
             revert_strike_max=5,
             gas_anomaly_ratio=2.0,
         )
-        fw = AegisFirewall(config=config)
+        fw = PlimsollFirewall(config=config)
         fw.record_gas_anomaly(actual_gas=500_000, simulated_gas=100_000)
         fw.reset()
         # Config should be preserved

@@ -1,9 +1,9 @@
 """
-Aegis Nitro Enclave — vsock signing server with KMS bootstrap.
+Plimsoll Nitro Enclave — vsock signing server with KMS bootstrap.
 
 Runs inside an AWS Nitro Enclave.  Receives transaction signing
 requests via vsock (the only permitted I/O channel), runs the full
-7-engine Aegis chain, and returns only the signature.
+7-engine Plimsoll chain, and returns only the signature.
 
 The private key NEVER leaves the enclave.  On boot, the enclave
 authenticates to AWS KMS using its PCR0 attestation document to
@@ -24,11 +24,11 @@ import socket
 import sys
 from typing import Any
 
-# These imports work because the Dockerfile copies the aegis/ package
-from aegis.firewall import AegisFirewall, AegisConfig
-from aegis.enclave.vault import KeyVault, AegisEnforcementError
+# These imports work because the Dockerfile copies the plimsoll/ package
+from plimsoll.firewall import PlimsollFirewall, PlimsollConfig
+from plimsoll.enclave.vault import KeyVault, PlimsollEnforcementError
 
-logger = logging.getLogger("aegis.nitro")
+logger = logging.getLogger("plimsoll.nitro")
 
 # Vsock constants (AWS Nitro)
 VSOCK_PORT = 5000
@@ -55,7 +55,7 @@ def handle_request(
         try:
             signature = vault.sign_eth_transaction(key_id, tx_dict, spend_amount=spend)
             return {"ok": True, "signature": signature}
-        except AegisEnforcementError as e:
+        except PlimsollEnforcementError as e:
             return {"ok": False, "error": str(e), "blocked": True}
         except Exception as e:
             return {"ok": False, "error": str(e)}
@@ -66,7 +66,7 @@ def handle_request(
         try:
             signature = vault.sign_typed_data(key_id, typed_data)
             return {"ok": True, "signature": signature}
-        except AegisEnforcementError as e:
+        except PlimsollEnforcementError as e:
             return {"ok": False, "error": str(e), "blocked": True}
         except Exception as e:
             return {"ok": False, "error": str(e)}
@@ -94,10 +94,10 @@ def _bootstrap_kms_key(vault: KeyVault) -> None:
     try:
         from kms_bootstrap import create_key_manager, KMSBootstrapConfig
 
-        kms_arn = os.environ.get("AEGIS_KMS_KEY_ARN", "")
+        kms_arn = os.environ.get("PLIMSOLL_KMS_KEY_ARN", "")
         if not kms_arn:
             logger.warning(
-                "AEGIS_KMS_KEY_ARN not set — skipping KMS bootstrap. "
+                "PLIMSOLL_KMS_KEY_ARN not set — skipping KMS bootstrap. "
                 "Keys must be injected manually via store_key action."
             )
             return
@@ -105,15 +105,15 @@ def _bootstrap_kms_key(vault: KeyVault) -> None:
         config = KMSBootstrapConfig(
             kms_key_arn=kms_arn,
             aws_region=os.environ.get("AWS_REGION", "us-east-1"),
-            expected_pcr0=os.environ.get("AEGIS_ENCLAVE_PCR0", ""),
-            provider=os.environ.get("AEGIS_KEY_PROVIDER", "kms"),
+            expected_pcr0=os.environ.get("PLIMSOLL_ENCLAVE_PCR0", ""),
+            provider=os.environ.get("PLIMSOLL_KEY_PROVIDER", "kms"),
         )
 
         manager = create_key_manager(config)
         signing_key = manager.bootstrap()
 
         # Store the derived key in the vault under the canonical ID
-        vault.store("aegis-primary", signing_key.hex())
+        vault.store("plimsoll-primary", signing_key.hex())
         logger.info(
             "KMS bootstrap complete — signing key injected into vault "
             "(key never touched host OS)"
@@ -132,11 +132,11 @@ def _bootstrap_kms_key(vault: KeyVault) -> None:
 def main() -> None:
     """Start the vsock server."""
     logging.basicConfig(level=logging.INFO)
-    logger.info("Aegis Nitro Enclave starting on vsock port %d", VSOCK_PORT)
+    logger.info("Plimsoll Nitro Enclave starting on vsock port %d", VSOCK_PORT)
 
     # Initialize vault with firewall
-    config = AegisConfig()
-    firewall = AegisFirewall(config=config)
+    config = PlimsollConfig()
+    firewall = PlimsollFirewall(config=config)
     vault = firewall.vault
 
     logger.info("Firewall + vault initialized (7 engines active)")

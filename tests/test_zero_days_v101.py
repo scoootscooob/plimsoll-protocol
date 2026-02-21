@@ -11,15 +11,15 @@ from __future__ import annotations
 import time
 import pytest
 
-from aegis.engines.asset_guard import (
+from plimsoll.engines.asset_guard import (
     AssetGuardConfig,
     AssetGuardEngine,
     KNOWN_BRIDGE_ADDRESSES,
     BRIDGE_FUNCTION_SELECTORS,
 )
-from aegis.engines.capital_velocity import CapitalVelocityConfig
-from aegis.firewall import AegisConfig, AegisFirewall
-from aegis.verdict import VerdictCode
+from plimsoll.engines.capital_velocity import CapitalVelocityConfig
+from plimsoll.firewall import PlimsollConfig, PlimsollFirewall
+from plimsoll.verdict import VerdictCode
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -39,7 +39,7 @@ class TestMetamorphicCodehashPinning:
 
     def test_metamorphic_verdict_is_blocked(self):
         """A BLOCK_METAMORPHIC_CODE verdict is properly blocked."""
-        from aegis.verdict import Verdict
+        from plimsoll.verdict import Verdict
         v = Verdict(
             code=VerdictCode.BLOCK_METAMORPHIC_CODE,
             reason="Bytecode mutated since simulation",
@@ -52,7 +52,7 @@ class TestMetamorphicCodehashPinning:
 
     def test_metamorphic_verdict_feedback_prompt(self):
         """Feedback prompt for metamorphic block contains critical info."""
-        from aegis.verdict import Verdict
+        from plimsoll.verdict import Verdict
         v = Verdict(
             code=VerdictCode.BLOCK_METAMORPHIC_CODE,
             reason="Target bytecode changed after simulation",
@@ -316,7 +316,7 @@ class TestBridgeDestinationDefense:
 class TestCognitiveStarvation:
     """Firewall detects infinite retry loops and cognitively severs the agent."""
 
-    def _make_firewall(self, **kwargs) -> AegisFirewall:
+    def _make_firewall(self, **kwargs) -> PlimsollFirewall:
         """Create a firewall with cognitive sever enabled."""
         defaults = dict(
             cognitive_sever_enabled=True,
@@ -326,9 +326,9 @@ class TestCognitiveStarvation:
             enable_vault=False,
         )
         defaults.update(kwargs)
-        return AegisFirewall(config=AegisConfig(**defaults))
+        return PlimsollFirewall(config=PlimsollConfig(**defaults))
 
-    def _trigger_block(self, fw: AegisFirewall) -> None:
+    def _trigger_block(self, fw: PlimsollFirewall) -> None:
         """Trigger a trajectory loop block."""
         payload = {"target": "0xDEAD", "amount": 1}
         fw.evaluate(payload)  # 1st time: allowed
@@ -343,7 +343,7 @@ class TestCognitiveStarvation:
 
     def test_cognitive_sever_disabled_by_default(self):
         """Default config has cognitive_sever_enabled=False."""
-        fw = AegisFirewall(config=AegisConfig(enable_vault=False))
+        fw = PlimsollFirewall(config=PlimsollConfig(enable_vault=False))
         assert fw.config.cognitive_sever_enabled is False
 
     def test_no_sever_below_threshold(self):
@@ -444,7 +444,7 @@ class TestCognitiveStarvation:
 
     def test_sever_feedback_prompt(self):
         """BLOCK_COGNITIVE_STARVATION verdict has correct feedback prompt."""
-        from aegis.verdict import Verdict
+        from plimsoll.verdict import Verdict
         v = Verdict(
             code=VerdictCode.BLOCK_COGNITIVE_STARVATION,
             reason="Agent is cognitively severed",
@@ -505,7 +505,7 @@ class TestCognitiveStarvation:
 
     def test_sever_disabled_no_strike_tracking(self):
         """When cognitive_sever_enabled=False, no strikes are recorded."""
-        fw = AegisFirewall(config=AegisConfig(
+        fw = PlimsollFirewall(config=PlimsollConfig(
             enable_vault=False,
             cognitive_sever_enabled=False,
         ))
@@ -526,7 +526,7 @@ class TestZeroDayV101Integration:
 
     def test_bridge_block_counts_as_strike(self):
         """A bridge destination block contributes to cognitive sever strikes."""
-        fw = AegisFirewall(config=AegisConfig(
+        fw = PlimsollFirewall(config=PlimsollConfig(
             enable_vault=False,
             cognitive_sever_enabled=True,
             strike_max=3,
@@ -551,7 +551,7 @@ class TestZeroDayV101Integration:
 
     def test_backward_compat_all_disabled(self):
         """Default config: all v1.0.1 features disabled, existing behavior intact."""
-        fw = AegisFirewall(config=AegisConfig(enable_vault=False))
+        fw = PlimsollFirewall(config=PlimsollConfig(enable_vault=False))
         # No bridge checking (empty approved_destinations)
         # No cognitive sever (disabled)
         v = fw.evaluate({"target": "0xABC", "amount": 100})

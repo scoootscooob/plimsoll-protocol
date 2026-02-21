@@ -1,14 +1,14 @@
-"""Tests for the @with_aegis_firewall decorator."""
+"""Tests for the @with_plimsoll_firewall decorator."""
 
-from aegis.firewall import AegisFirewall, AegisConfig
-from aegis.engines.trajectory_hash import TrajectoryHashConfig
-from aegis.decorator import with_aegis_firewall
+from plimsoll.firewall import PlimsollFirewall, PlimsollConfig
+from plimsoll.engines.trajectory_hash import TrajectoryHashConfig
+from plimsoll.decorator import with_plimsoll_firewall
 
 
 def test_decorator_allows_clean_call():
-    fw = AegisFirewall()
+    fw = PlimsollFirewall()
 
-    @with_aegis_firewall(fw)
+    @with_plimsoll_firewall(fw)
     def send_tx(payload):
         return {"status": "sent", "payload": payload}
 
@@ -17,13 +17,13 @@ def test_decorator_allows_clean_call():
 
 
 def test_decorator_blocks_loop():
-    fw = AegisFirewall(
-        config=AegisConfig(
+    fw = PlimsollFirewall(
+        config=PlimsollConfig(
             trajectory=TrajectoryHashConfig(max_duplicates=1, window_seconds=60)
         )
     )
 
-    @with_aegis_firewall(fw)
+    @with_plimsoll_firewall(fw)
     def send_tx(payload):
         return {"status": "sent"}
 
@@ -32,18 +32,18 @@ def test_decorator_blocks_loop():
     assert r1["status"] == "sent"
 
     r2 = send_tx(payload)
-    assert r2.get("aegis_blocked") is True
+    assert r2.get("plimsoll_blocked") is True
     assert "feedback" in r2
 
 
 def test_decorator_custom_on_block():
-    fw = AegisFirewall(
-        config=AegisConfig(
+    fw = PlimsollFirewall(
+        config=PlimsollConfig(
             trajectory=TrajectoryHashConfig(max_duplicates=1, window_seconds=60)
         )
     )
 
-    @with_aegis_firewall(fw, on_block=lambda v: {"custom": "blocked", "reason": v.reason})
+    @with_plimsoll_firewall(fw, on_block=lambda v: {"custom": "blocked", "reason": v.reason})
     def send_tx(payload):
         return {"status": "sent"}
 
@@ -54,10 +54,10 @@ def test_decorator_custom_on_block():
 
 
 def test_decorator_exposes_firewall():
-    fw = AegisFirewall()
+    fw = PlimsollFirewall()
 
-    @with_aegis_firewall(fw)
+    @with_plimsoll_firewall(fw)
     def action(payload):
         return True
 
-    assert action.aegis_firewall is fw
+    assert action.plimsoll_firewall is fw

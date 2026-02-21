@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from aegis.firewall import AegisFirewall, AegisConfig
-from aegis.engines.capital_velocity import CapitalVelocityConfig
-from aegis.proxy.http_proxy import extract_api_cost, evaluate_http_request
+from plimsoll.firewall import PlimsollFirewall, PlimsollConfig
+from plimsoll.engines.capital_velocity import CapitalVelocityConfig
+from plimsoll.proxy.http_proxy import extract_api_cost, evaluate_http_request
 
 
 class TestExtractApiCost:
@@ -54,7 +54,7 @@ class TestExtractApiCost:
 
 class TestEvaluateHttpRequest:
     def test_allowed_small_charge(self) -> None:
-        fw = AegisFirewall(config=AegisConfig())
+        fw = PlimsollFirewall(config=PlimsollConfig())
         allowed, reason, cost = evaluate_http_request(
             fw, "POST", "https://api.stripe.com/v1/charges",
             body={"amount": 100},
@@ -63,7 +63,7 @@ class TestEvaluateHttpRequest:
         assert cost == 1.0  # 100 cents = $1
 
     def test_blocked_by_velocity(self) -> None:
-        fw = AegisFirewall(config=AegisConfig(
+        fw = PlimsollFirewall(config=PlimsollConfig(
             velocity=CapitalVelocityConfig(v_max=0.001, max_single_amount=5.0),
         ))
         allowed, reason, cost = evaluate_http_request(
@@ -74,7 +74,7 @@ class TestEvaluateHttpRequest:
         assert cost == 1000.0
 
     def test_ungoverned_passthrough(self) -> None:
-        fw = AegisFirewall(config=AegisConfig())
+        fw = PlimsollFirewall(config=PlimsollConfig())
         allowed, reason, cost = evaluate_http_request(
             fw, "GET", "https://api.example.com/data",
         )

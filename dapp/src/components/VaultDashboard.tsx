@@ -36,8 +36,8 @@ export function VaultDashboard() {
   if (!isConnected) {
     return (
       <div className="text-center py-20">
-        <h2 className="text-3xl font-bold mb-4 bg-gradient-to-r from-aegis-400 to-aegis-200 bg-clip-text text-transparent">
-          Aegis Capital Delegation
+        <h2 className="text-3xl font-bold mb-4 bg-gradient-to-r from-plimsoll-400 to-plimsoll-200 bg-clip-text text-transparent">
+          Plimsoll Capital Delegation
         </h2>
         <p className="text-gray-400 text-lg mb-8 max-w-md mx-auto">
           Manage AI agent vaults with deterministic, on-chain physics
@@ -82,7 +82,7 @@ export function VaultDashboard() {
             type="text"
             value={vaultAddress}
             onChange={(e) => setVaultAddress(e.target.value)}
-            placeholder="0x... Enter your AegisVault contract address"
+            placeholder="0x... Enter your PlimsollVault contract address"
             className="input-field font-mono text-sm"
           />
           <button

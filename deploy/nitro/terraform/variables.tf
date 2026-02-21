@@ -1,4 +1,4 @@
-# Aegis Nitro Enclave — Terraform variables.
+# Plimsoll Nitro Enclave — Terraform variables.
 
 variable "aws_region" {
   description = "AWS region for deployment"

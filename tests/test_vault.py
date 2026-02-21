@@ -1,6 +1,6 @@
 """Tests for the Key Vault (Context-Window Airgap)."""
 
-from aegis.enclave.vault import KeyVault
+from plimsoll.enclave.vault import KeyVault
 
 
 def test_store_and_sign():

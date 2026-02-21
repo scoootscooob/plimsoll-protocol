@@ -1,25 +1,25 @@
-"""Tests for the ``AegisDeFiTools`` OpenClaw integration."""
+"""Tests for the ``PlimsollDeFiTools`` OpenClaw integration."""
 
 from __future__ import annotations
 
 import pytest
 
-from aegis.firewall import AegisFirewall, AegisConfig
-from aegis.engines.capital_velocity import CapitalVelocityConfig
-from aegis.integrations.openclaw import AegisDeFiTools
+from plimsoll.firewall import PlimsollFirewall, PlimsollConfig
+from plimsoll.engines.capital_velocity import CapitalVelocityConfig
+from plimsoll.integrations.openclaw import PlimsollDeFiTools
 
 
-def _make_firewall(**kwargs: object) -> AegisFirewall:
-    return AegisFirewall(config=AegisConfig(**kwargs))
+def _make_firewall(**kwargs: object) -> PlimsollFirewall:
+    return PlimsollFirewall(config=PlimsollConfig(**kwargs))
 
 
 # ────────────────────────────────────────────────────────────────────
 
-class TestAegisDeFiTools:
+class TestPlimsollDeFiTools:
 
     def test_allows_clean_call(self) -> None:
         fw = _make_firewall()
-        tools = AegisDeFiTools(firewall=fw)
+        tools = PlimsollDeFiTools(firewall=fw)
 
         def swap(payload, **kw):
             return {"status": "swapped"}
@@ -32,7 +32,7 @@ class TestAegisDeFiTools:
         fw = _make_firewall(
             velocity=CapitalVelocityConfig(v_max=0.001, max_single_amount=5.0),
         )
-        tools = AegisDeFiTools(firewall=fw)
+        tools = PlimsollDeFiTools(firewall=fw)
 
         def swap(payload, **kw):
             return {"status": "swapped"}
@@ -40,12 +40,12 @@ class TestAegisDeFiTools:
         tools.register(name="swap", fn=swap, spend_key="amount")
         result = tools.get_tool("swap")({"token": "ETH", "amount": 100.0})
         assert isinstance(result, str)
-        assert "[AEGIS SYSTEM OVERRIDE]" in result
+        assert "[PLIMSOLL SYSTEM OVERRIDE]" in result
         assert "Do not retry" in result
 
     def test_preserves_function_metadata(self) -> None:
         fw = _make_firewall()
-        tools = AegisDeFiTools(firewall=fw)
+        tools = PlimsollDeFiTools(firewall=fw)
 
         def my_swap_function(payload, **kw):
             """Execute a swap."""
@@ -57,7 +57,7 @@ class TestAegisDeFiTools:
 
     def test_get_tool_definitions_format(self) -> None:
         fw = _make_firewall()
-        tools = AegisDeFiTools(firewall=fw)
+        tools = PlimsollDeFiTools(firewall=fw)
 
         tools.register(name="swap", fn=lambda p: "ok", description="Swap tokens")
         tools.register(name="transfer", fn=lambda p: "ok", description="Send tokens")
@@ -74,7 +74,7 @@ class TestAegisDeFiTools:
         fw = _make_firewall(
             velocity=CapitalVelocityConfig(v_max=0.001, max_single_amount=50.0),
         )
-        tools = AegisDeFiTools(firewall=fw)
+        tools = PlimsollDeFiTools(firewall=fw)
 
         tools.register(name="cheap", fn=lambda p: "ok", spend_key="amount")
         tools.register(name="expensive", fn=lambda p: "ok", spend_key="value")
@@ -86,9 +86,9 @@ class TestAegisDeFiTools:
         # "expensive" uses value=999.0 → blocked
         r2 = tools.get_tool("expensive")({"value": 999.0})
         assert isinstance(r2, str)
-        assert "[AEGIS SYSTEM OVERRIDE]" in r2
+        assert "[PLIMSOLL SYSTEM OVERRIDE]" in r2
 
     def test_get_tool_returns_none_for_unknown(self) -> None:
         fw = _make_firewall()
-        tools = AegisDeFiTools(firewall=fw)
+        tools = PlimsollDeFiTools(firewall=fw)
         assert tools.get_tool("nonexistent") is None

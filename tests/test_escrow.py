@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import time
 
-from aegis.escrow import (
+from plimsoll.escrow import (
     EscrowQueue,
     EscrowConfig,
     EscrowedTransaction,
     EscrowStatus,
 )
-from aegis.firewall import AegisFirewall, AegisConfig
-from aegis.engines.capital_velocity import CapitalVelocityConfig
-from aegis.verdict import VerdictCode
+from plimsoll.firewall import PlimsollFirewall, PlimsollConfig
+from plimsoll.engines.capital_velocity import CapitalVelocityConfig
+from plimsoll.verdict import VerdictCode
 
 
 # ── Standalone EscrowQueue tests ─────────────────────────────────
@@ -220,8 +220,8 @@ def test_reset_clears_all():
 
 def test_firewall_escrow_disabled_by_default():
     """With default config, escrow should be disabled and blocked txns stay blocked."""
-    fw = AegisFirewall(
-        config=AegisConfig(
+    fw = PlimsollFirewall(
+        config=PlimsollConfig(
             velocity=CapitalVelocityConfig(
                 v_max=1.0,
                 pid_threshold=1.0,
@@ -237,8 +237,8 @@ def test_firewall_escrow_disabled_by_default():
 
 def test_firewall_escrow_intercepts_blocked_txn():
     """When escrow is enabled and spend >= threshold, blocked txn should be escrowed."""
-    fw = AegisFirewall(
-        config=AegisConfig(
+    fw = PlimsollFirewall(
+        config=PlimsollConfig(
             velocity=CapitalVelocityConfig(
                 v_max=1.0,
                 pid_threshold=1.0,
@@ -266,8 +266,8 @@ def test_firewall_escrow_intercepts_blocked_txn():
 
 def test_firewall_escrow_below_threshold_hard_blocks():
     """Blocked txns below auto_escalate_above should still hard-block."""
-    fw = AegisFirewall(
-        config=AegisConfig(
+    fw = PlimsollFirewall(
+        config=PlimsollConfig(
             velocity=CapitalVelocityConfig(
                 v_max=1.0,
                 pid_threshold=1.0,
@@ -289,8 +289,8 @@ def test_firewall_escrow_below_threshold_hard_blocks():
 
 def test_firewall_approve_escrowed_txn():
     """Approving an escrowed txn should update its status."""
-    fw = AegisFirewall(
-        config=AegisConfig(
+    fw = PlimsollFirewall(
+        config=PlimsollConfig(
             velocity=CapitalVelocityConfig(
                 v_max=1.0,
                 pid_threshold=1.0,
@@ -313,8 +313,8 @@ def test_firewall_approve_escrowed_txn():
 
 def test_firewall_reject_escrowed_txn():
     """Rejecting an escrowed txn should remove it from pending."""
-    fw = AegisFirewall(
-        config=AegisConfig(
+    fw = PlimsollFirewall(
+        config=PlimsollConfig(
             velocity=CapitalVelocityConfig(
                 v_max=1.0,
                 pid_threshold=1.0,
@@ -338,8 +338,8 @@ def test_firewall_reject_escrowed_txn():
 
 def test_pending_human_approval_feedback_prompt():
     """PENDING_HUMAN_APPROVAL verdict should produce a 'HELD FOR HUMAN REVIEW' prompt."""
-    fw = AegisFirewall(
-        config=AegisConfig(
+    fw = PlimsollFirewall(
+        config=PlimsollConfig(
             velocity=CapitalVelocityConfig(
                 v_max=1.0,
                 pid_threshold=1.0,
@@ -363,8 +363,8 @@ def test_pending_human_approval_feedback_prompt():
 
 def test_firewall_stats_include_escrowed():
     """Firewall stats should track escrowed count separately."""
-    fw = AegisFirewall(
-        config=AegisConfig(
+    fw = PlimsollFirewall(
+        config=PlimsollConfig(
             velocity=CapitalVelocityConfig(
                 v_max=1.0,
                 pid_threshold=1.0,
@@ -388,8 +388,8 @@ def test_firewall_stats_include_escrowed():
 
 def test_firewall_reset_clears_escrow():
     """Firewall reset() should also clear escrow queue."""
-    fw = AegisFirewall(
-        config=AegisConfig(
+    fw = PlimsollFirewall(
+        config=PlimsollConfig(
             velocity=CapitalVelocityConfig(
                 v_max=1.0,
                 pid_threshold=1.0,

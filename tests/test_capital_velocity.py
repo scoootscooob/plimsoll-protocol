@@ -2,8 +2,8 @@
 
 import time
 
-from aegis.engines.capital_velocity import CapitalVelocityEngine, CapitalVelocityConfig
-from aegis.verdict import VerdictCode
+from plimsoll.engines.capital_velocity import CapitalVelocityEngine, CapitalVelocityConfig
+from plimsoll.verdict import VerdictCode
 
 
 def test_allows_normal_spending():
@@ -125,4 +125,4 @@ def test_feedback_prompt_includes_velocity():
     v = engine.evaluate(100.0)
     if v.blocked:
         feedback = v.feedback_prompt()
-        assert "AEGIS FIREWALL" in feedback
+        assert "PLIMSOLL FIREWALL" in feedback

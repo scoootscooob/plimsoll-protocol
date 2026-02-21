@@ -22,7 +22,7 @@ export function DepositWithdraw({ vaultAddress }: Props) {
 
       {/* Deposit */}
       <div className="space-y-3 mb-6">
-        <h4 className="text-sm font-medium text-aegis-400">Deposit ETH</h4>
+        <h4 className="text-sm font-medium text-plimsoll-400">Deposit ETH</h4>
         <div className="flex gap-2">
           <input
             type="number"
@@ -62,7 +62,7 @@ export function DepositWithdraw({ vaultAddress }: Props) {
 
       {/* Withdraw */}
       <div className="space-y-3">
-        <h4 className="text-sm font-medium text-aegis-400">Withdraw ETH</h4>
+        <h4 className="text-sm font-medium text-plimsoll-400">Withdraw ETH</h4>
         <input
           type="text"
           value={withdrawTo}

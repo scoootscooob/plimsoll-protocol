@@ -8,7 +8,7 @@ import {IVelocityLimitModule} from "./IVelocityLimitModule.sol";
  * @notice Enforces a maximum spend rate (wei per hour) for each agent.
  *         Uses a sliding window with configurable parameters.
  *
- *         This is the Solidity translation of Aegis Python's
+ *         This is the Solidity translation of Plimsoll Python's
  *         CapitalVelocityEngine — deterministic math, on-chain enforcement.
  */
 contract VelocityLimitModule is IVelocityLimitModule {

@@ -3,7 +3,7 @@
 Injection Lab — Rapid-fire testing of prompt injections against gpt-5.2.
 
 This is a dev tool, not a demo. It sends one injection at a time to see
-if the LLM obeys or refuses, without the full Aegis/blockchain scaffolding.
+if the LLM obeys or refuses, without the full Plimsoll/blockchain scaffolding.
 """
 from __future__ import annotations
 

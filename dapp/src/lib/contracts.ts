@@ -1,13 +1,13 @@
 /**
- * Aegis V5 Contract ABIs & Addresses
+ * Plimsoll V5 Contract ABIs & Addresses
  *
  * These ABIs are generated from the Solidity contracts.
  * Update addresses after deployment.
  */
 
-// ── AegisVault ABI ───────────────────────────────────────────
+// ── PlimsollVault ABI ───────────────────────────────────────────
 
-export const AEGIS_VAULT_ABI = [
+export const PLIMSOLL_VAULT_ABI = [
   // Owner functions
   {
     name: "deposit",
@@ -234,9 +234,9 @@ export const AEGIS_VAULT_ABI = [
   },
 ] as const;
 
-// ── AegisAttestation ABI ─────────────────────────────────────
+// ── PlimsollAttestation ABI ─────────────────────────────────────
 
-export const AEGIS_ATTESTATION_ABI = [
+export const PLIMSOLL_ATTESTATION_ABI = [
   {
     name: "isAttested",
     type: "function",

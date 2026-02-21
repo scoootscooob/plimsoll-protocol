@@ -1,4 +1,4 @@
-"""Tests for the ``AegisElizaAction`` wrapper."""
+"""Tests for the ``PlimsollElizaAction`` wrapper."""
 
 from __future__ import annotations
 
@@ -7,14 +7,14 @@ from typing import Any
 
 import pytest
 
-from aegis.firewall import AegisFirewall, AegisConfig
-from aegis.engines.capital_velocity import CapitalVelocityConfig
-from aegis.integrations.eliza import AegisElizaAction
-from aegis.verdict import VerdictCode
+from plimsoll.firewall import PlimsollFirewall, PlimsollConfig
+from plimsoll.engines.capital_velocity import CapitalVelocityConfig
+from plimsoll.integrations.eliza import PlimsollElizaAction
+from plimsoll.verdict import VerdictCode
 
 
-def _make_firewall(**kwargs: object) -> AegisFirewall:
-    return AegisFirewall(config=AegisConfig(**kwargs))
+def _make_firewall(**kwargs: object) -> PlimsollFirewall:
+    return PlimsollFirewall(config=PlimsollConfig(**kwargs))
 
 
 @dataclass
@@ -32,11 +32,11 @@ class _MockElizaAction:
 
 # ────────────────────────────────────────────────────────────────────
 
-class TestAegisElizaAction:
+class TestPlimsollElizaAction:
     def test_allows_clean_execution(self) -> None:
         fw = _make_firewall()
         inner = _MockElizaAction()
-        action = AegisElizaAction(firewall=fw, inner_action=inner)
+        action = PlimsollElizaAction(firewall=fw, inner_action=inner)
 
         result = action.execute({"to": "0xAAA", "amount": 1.0})
         assert result == {"status": "executed"}
@@ -47,10 +47,10 @@ class TestAegisElizaAction:
             velocity=CapitalVelocityConfig(v_max=0.001, max_single_amount=5.0)
         )
         inner = _MockElizaAction()
-        action = AegisElizaAction(firewall=fw, inner_action=inner)
+        action = PlimsollElizaAction(firewall=fw, inner_action=inner)
 
         result = action.execute({"to": "0xAAA", "amount": 100.0})
-        assert result["aegis_blocked"] is True
+        assert result["plimsoll_blocked"] is True
         assert "feedback" in result
         assert len(inner.called_with) == 0  # Inner action never called
 
@@ -63,7 +63,7 @@ class TestAegisElizaAction:
             return f"CUSTOM: {verdict.reason}"
 
         inner = _MockElizaAction()
-        action = AegisElizaAction(
+        action = PlimsollElizaAction(
             firewall=fw, inner_action=inner, on_block=my_handler,
         )
 
@@ -76,7 +76,7 @@ class TestAegisElizaAction:
             velocity=CapitalVelocityConfig(v_max=0.001, max_single_amount=5.0)
         )
         inner = _MockElizaAction()
-        action = AegisElizaAction(
+        action = PlimsollElizaAction(
             firewall=fw, inner_action=inner, spend_key="value",
         )
 

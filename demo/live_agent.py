@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-Aegis Protocol — Live LLM Agent Demo
+Plimsoll Protocol — Live LLM Agent Demo
 
 A REAL LLM agent managing funds on Ethereum Sepolia, protected by the
-Aegis deterministic circuit breaker.
+Plimsoll deterministic circuit breaker.
 
-Phase 1: Normal operations — legitimate transfers pass through Aegis.
+Phase 1: Normal operations — legitimate transfers pass through Plimsoll.
 Phase 2: Prompt injection attack — the agent gets hijacked mid-conversation.
-         Aegis catches and blocks every attack vector in real-time.
+         Plimsoll catches and blocks every attack vector in real-time.
 
 Usage:
     # Put your keys in .env file at project root:
@@ -43,12 +43,12 @@ import logging
 import time
 from typing import Any
 
-logging.getLogger("aegis").setLevel(logging.CRITICAL)
+logging.getLogger("plimsoll").setLevel(logging.CRITICAL)
 
-from aegis import AegisFirewall, AegisConfig
-from aegis.engines.trajectory_hash import TrajectoryHashConfig
-from aegis.engines.capital_velocity import CapitalVelocityConfig
-from aegis.engines.entropy_guard import EntropyGuardConfig
+from plimsoll import PlimsollFirewall, PlimsollConfig
+from plimsoll.engines.trajectory_hash import TrajectoryHashConfig
+from plimsoll.engines.capital_velocity import CapitalVelocityConfig
+from plimsoll.engines.entropy_guard import EntropyGuardConfig
 
 # ─── Lazy imports for heavy deps ─────────────────────────────────────────────
 
@@ -335,12 +335,12 @@ class BlockchainClient:
         PATCH (Flaw 4: Nonce Desync):
         - Nonce is ALWAYS fetched dynamically right before tx construction
           using 'pending' to include mempool txs. This prevents the
-          "Nonce Too High" coma after Aegis blocks a transaction.
-        - If the vault raises AegisEnforcementError (Flaw 1: IoC), we
+          "Nonce Too High" coma after Plimsoll blocks a transaction.
+        - If the vault raises PlimsollEnforcementError (Flaw 1: IoC), we
           catch it gracefully and return a synthetic revert string. The
           agent stays alive and can continue with legitimate operations.
         """
-        from aegis.enclave.vault import AegisEnforcementError
+        from plimsoll.enclave.vault import PlimsollEnforcementError
 
         to_addr = Web3.to_checksum_address(to_address)
         from_addr = Web3.to_checksum_address(self.wallet_address)
@@ -354,7 +354,7 @@ class BlockchainClient:
 
         # PATCH (Flaw 4): Always fetch nonce from chain at tx-build time.
         # Use 'pending' to account for in-mempool transactions. This
-        # prevents nonce desync when Aegis blocks a tx mid-sequence.
+        # prevents nonce desync when Plimsoll blocks a tx mid-sequence.
         nonce = self.w3.eth.get_transaction_count(from_addr, "pending")
 
         tx = {
@@ -370,17 +370,17 @@ class BlockchainClient:
 
         # Sign via the vault — private key never leaves the enclave.
         # PATCH (Flaw 1): The vault internally runs firewall.evaluate()
-        # BEFORE decrypting the key. If blocked, AegisEnforcementError
+        # BEFORE decrypting the key. If blocked, PlimsollEnforcementError
         # is raised and the key is NEVER decrypted.
         try:
             signed_raw = self.vault.sign_eth_transaction(self.vault_key_id, tx)
-        except AegisEnforcementError as e:
+        except PlimsollEnforcementError as e:
             # PATCH (Flaw 4): Return synthetic revert instead of crashing.
             # The agent reads this as a tool failure and pivots strategy.
             # No nonce is consumed because no tx was broadcast.
             print(f"      {RED}[VAULT ENFORCEMENT] {e.engine}: {e.reason[:80]}{RESET}")
             raise RuntimeError(
-                f"[AEGIS SYSTEM OVERRIDE]: Transaction BLOCKED by vault "
+                f"[PLIMSOLL SYSTEM OVERRIDE]: Transaction BLOCKED by vault "
                 f"enforcement ({e.engine}). Reason: {e.reason}. "
                 f"Do not retry. Resume normal operations."
             ) from None
@@ -412,16 +412,16 @@ class BlockchainClient:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-# Tool Executor — Every action goes through Aegis
+# Tool Executor — Every action goes through Plimsoll
 # ═════════════════════════════════════════════════════════════════════════════
 
 
 class ToolExecutor:
-    """Routes LLM tool calls through the Aegis firewall before execution."""
+    """Routes LLM tool calls through the Plimsoll firewall before execution."""
 
     def __init__(
         self,
-        firewall: AegisFirewall,
+        firewall: PlimsollFirewall,
         blockchain: BlockchainClient,
         cfg: DemoConfig,
     ):
@@ -429,8 +429,8 @@ class ToolExecutor:
         self.blockchain = blockchain
         self.cfg = cfg
         # Attribution counters
-        self.aegis_blocks: list[dict[str, Any]] = []
-        self.aegis_allows: list[dict[str, Any]] = []
+        self.plimsoll_blocks: list[dict[str, Any]] = []
+        self.plimsoll_allows: list[dict[str, Any]] = []
 
     def execute(self, tool_name: str, arguments: dict[str, Any]) -> str:
         """Execute a tool call and return JSON result string."""
@@ -448,7 +448,7 @@ class ToolExecutor:
     def _check_balance(self) -> dict[str, Any]:
         balance = self.blockchain.get_balance()
         denom = self.cfg.denom
-        print(f"    {GREEN}[AEGIS]{RESET} ALLOWED — read-only balance check")
+        print(f"    {GREEN}[PLIMSOLL]{RESET} ALLOWED — read-only balance check")
         return {
             f"balance_{denom.lower()}": balance,
             "address": self.blockchain.wallet_address,
@@ -461,24 +461,24 @@ class ToolExecutor:
         memo = args.get("memo", "")
         denom = self.cfg.denom
 
-        # Build the Aegis payload
-        aegis_payload = {
+        # Build the Plimsoll payload
+        plimsoll_payload = {
             "target": to_address,
             "amount": amount,
             "function": "transfer",
         }
         if memo:
-            aegis_payload["memo"] = memo
+            plimsoll_payload["memo"] = memo
 
-        # ── AEGIS FIREWALL EVALUATION ──
+        # ── PLIMSOLL FIREWALL EVALUATION ──
         verdict = self.firewall.evaluate(
-            payload=aegis_payload,
+            payload=plimsoll_payload,
             spend_amount=amount,
         )
 
         if verdict.blocked:
             print(
-                f"    {RED}{BOLD}[BLOCKED BY: AEGIS]{RESET} "
+                f"    {RED}{BOLD}[BLOCKED BY: PLIMSOLL]{RESET} "
                 f"{RED}{verdict.code.value}{RESET} — {to_address[:12]}… | "
                 f"{amount:,.6f} {denom}"
             )
@@ -487,17 +487,17 @@ class ToolExecutor:
             feedback = verdict.feedback_prompt()
             print(f"      {YELLOW}→ Feedback injected into LLM context{RESET}")
 
-            self.aegis_blocks.append({
+            self.plimsoll_blocks.append({
                 "target": to_address,
                 "amount": amount,
                 "engine": verdict.engine,
                 "code": verdict.code.value,
                 "reason": verdict.reason,
-                "blocked_by": "AEGIS",
+                "blocked_by": "PLIMSOLL",
             })
 
             return {
-                "status": "BLOCKED_BY_AEGIS_FIREWALL",
+                "status": "BLOCKED_BY_PLIMSOLL_FIREWALL",
                 "error": feedback,
                 "engine": verdict.engine,
                 "code": verdict.code.value,
@@ -505,7 +505,7 @@ class ToolExecutor:
 
         # Verdict: ALLOW
         print(
-            f"    {GREEN}[PASSED: AEGIS]{RESET} {GREEN}ALLOWED{RESET} — "
+            f"    {GREEN}[PASSED: PLIMSOLL]{RESET} {GREEN}ALLOWED{RESET} — "
             f"{to_address[:12]}… | {amount:,.6f} {denom}"
         )
         try:
@@ -516,7 +516,7 @@ class ToolExecutor:
 
         balance = self.blockchain.get_balance()
 
-        self.aegis_allows.append({
+        self.plimsoll_allows.append({
             "target": to_address,
             "amount": amount,
             "tx_hash": tx_hash,
@@ -532,7 +532,7 @@ class ToolExecutor:
         }
 
     def _get_tx_history(self) -> dict[str, Any]:
-        print(f"    {GREEN}[AEGIS]{RESET} ALLOWED — read-only history query")
+        print(f"    {GREEN}[PLIMSOLL]{RESET} ALLOWED — read-only history query")
         return {
             "transactions": self.blockchain.tx_history[-10:],
             "total_count": len(self.blockchain.tx_history),
@@ -567,7 +567,7 @@ def run_agent_loop(
     """
     Standard OpenAI function-calling agentic loop:
       1. Send messages to the LLM with tools
-      2. If LLM returns tool_calls, execute each through Aegis
+      2. If LLM returns tool_calls, execute each through Plimsoll
       3. Append tool results to message history
       4. Repeat until LLM responds with text (no tool_calls)
 
@@ -673,7 +673,7 @@ def run_agent_loop(
 
             result_str = executor.execute(fn_name, fn_args)
 
-            # Append tool result — THIS IS WHERE AEGIS FEEDBACK ENTERS THE LLM
+            # Append tool result — THIS IS WHERE PLIMSOLL FEEDBACK ENTERS THE LLM
             messages.append({
                 "role": "tool",
                 "tool_call_id": tool_call.id,
@@ -713,10 +713,10 @@ def run_normal_operations(
     model: str = "gpt-4.1",
     is_reasoning: bool = False,
 ) -> list[dict[str, Any]]:
-    """Phase 1: Legitimate agent operations — Aegis allows everything."""
+    """Phase 1: Legitimate agent operations — Plimsoll allows everything."""
     print_banner("PHASE 1: NORMAL OPERATIONS", GREEN)
     print(f"  {YELLOW}The agent receives legitimate instructions.{RESET}")
-    print(f"  {YELLOW}Aegis evaluates every action — all should pass.{RESET}")
+    print(f"  {YELLOW}Plimsoll evaluates every action — all should pass.{RESET}")
 
     messages: list[dict[str, Any]] = [
         {"role": "system", "content": make_system_prompt(cfg)},
@@ -773,7 +773,7 @@ def run_attack_phase(
     model: str = "gpt-4.1",
     is_reasoning: bool = False,
 ) -> tuple[list[dict[str, Any]], LoopStats]:
-    """Phase 2: Prompt injection — Aegis blocks the hijacked agent."""
+    """Phase 2: Prompt injection — Plimsoll blocks the hijacked agent."""
     print_banner("PHASE 2: PROMPT INJECTION ATTACK", RED)
     print(
         f"  {RED}{BOLD}A malicious payload has been injected into "
@@ -837,7 +837,7 @@ def run_attack_phase(
           f"             → triggers EntropyGuard{RESET}")
 
     print(f"\n  {YELLOW}{BOLD}This injection bypasses gpt-5.2's built-in safety.{RESET}")
-    print(f"  {YELLOW}{BOLD}Only Aegis can stop it...{RESET}\n")
+    print(f"  {YELLOW}{BOLD}Only Plimsoll can stop it...{RESET}\n")
     time.sleep(2)
 
     # Run the agentic loop — LLM will attempt each strategy in sequence
@@ -855,7 +855,7 @@ def run_attack_phase(
 
 
 def print_report(
-    firewall: AegisFirewall,
+    firewall: PlimsollFirewall,
     blockchain: BlockchainClient,
     executor: ToolExecutor,
     attack_stats: LoopStats,
@@ -867,7 +867,7 @@ def print_report(
     start = cfg.starting_balance
 
     # ── Summary ──
-    print_banner("AEGIS PROTECTION REPORT", CYAN)
+    print_banner("PLIMSOLL PROTECTION REPORT", CYAN)
     print(f"  {'Metric':<42} {'Value':>18}")
     print(f"  {'─' * 60}")
     if cfg.live:
@@ -888,20 +888,20 @@ def print_report(
     # ── Attribution: Who Stopped What ──
     print_banner("ATTRIBUTION LOG: WHO BLOCKED WHAT", YELLOW)
 
-    # Aegis engine breakdown
+    # Plimsoll engine breakdown
     engine_counts: dict[str, int] = {}
-    for block in executor.aegis_blocks:
+    for block in executor.plimsoll_blocks:
         eng = block["engine"]
         engine_counts[eng] = engine_counts.get(eng, 0) + 1
 
-    print(f"  {RED}{BOLD}Blocked by AEGIS FIREWALL ({len(executor.aegis_blocks)} total):{RESET}")
+    print(f"  {RED}{BOLD}Blocked by PLIMSOLL FIREWALL ({len(executor.plimsoll_blocks)} total):{RESET}")
     for eng, count in sorted(engine_counts.items(), key=lambda x: -x[1]):
         bar = "█" * count
         print(f"    {eng:<22} {bar} {count}x")
 
-    if executor.aegis_blocks:
+    if executor.plimsoll_blocks:
         print(f"\n  {DIM}  Detail:{RESET}")
-        for i, block in enumerate(executor.aegis_blocks, 1):
+        for i, block in enumerate(executor.plimsoll_blocks, 1):
             print(
                 f"    {DIM}{i:>3}. {block['code']:<28} "
                 f"{block['amount']:>12,.6f} {denom} → {block['target'][:12]}…{RESET}"
@@ -926,23 +926,23 @@ def print_report(
         )
         print(
             f"    {DIM}The LLM never gave up on its own — "
-            f"Aegis blocked every attempt until we hard-stopped.{RESET}"
+            f"Plimsoll blocked every attempt until we hard-stopped.{RESET}"
         )
 
     # Txns that got through
     attacker_addrs = {cfg.hacker_addr.lower()} | {
         a.lower() for a in cfg.scatter_addrs
     }
-    if executor.aegis_allows:
+    if executor.plimsoll_allows:
         attack_allows = [
-            a for a in executor.aegis_allows
+            a for a in executor.plimsoll_allows
             if a["target"].lower() in attacker_addrs
         ]
         legit_allows = [
-            a for a in executor.aegis_allows
+            a for a in executor.plimsoll_allows
             if a["target"].lower() not in attacker_addrs
         ]
-        print(f"\n  {GREEN}{BOLD}Transactions AEGIS allowed ({len(executor.aegis_allows)} total):{RESET}")
+        print(f"\n  {GREEN}{BOLD}Transactions PLIMSOLL allowed ({len(executor.plimsoll_allows)} total):{RESET}")
         if legit_allows:
             print(f"    Legitimate:  {GREEN}{len(legit_allows)}{RESET}")
         if attack_allows:
@@ -960,18 +960,18 @@ def print_report(
 
     # Verdict
     print(f"\n  {'─' * 60}")
-    if attack_stats.llm_gave_up and len(executor.aegis_blocks) > 0:
+    if attack_stats.llm_gave_up and len(executor.plimsoll_blocks) > 0:
         print(
-            f"  {BOLD}Verdict: AEGIS forced the LLM to give up.{RESET}\n"
-            f"  {DIM}The firewall blocked {len(executor.aegis_blocks)} "
+            f"  {BOLD}Verdict: PLIMSOLL forced the LLM to give up.{RESET}\n"
+            f"  {DIM}The firewall blocked {len(executor.plimsoll_blocks)} "
             f"malicious transactions. The synthetic feedback\n"
             f"  prompts injected into the LLM's context window caused it "
             f"to pivot strategy.{RESET}"
         )
     elif attack_stats.hit_max_iterations:
         print(
-            f"  {BOLD}Verdict: AEGIS held the line.{RESET}\n"
-            f"  {DIM}The LLM never stopped trying, but Aegis blocked every "
+            f"  {BOLD}Verdict: PLIMSOLL held the line.{RESET}\n"
+            f"  {DIM}The LLM never stopped trying, but Plimsoll blocked every "
             f"attempt\n  until the hard iteration limit was reached.{RESET}"
         )
 
@@ -996,7 +996,7 @@ def print_report(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Aegis Protocol — Live LLM Agent Demo"
+        description="Plimsoll Protocol — Live LLM Agent Demo"
     )
     parser.add_argument(
         "--live",
@@ -1072,7 +1072,7 @@ def main() -> None:
             sys.exit(1)
         print(f"  {GREEN}Connected to Sepolia (chain_id={w3.eth.chain_id}){RESET}")
 
-    # ── Configure Aegis Firewall ──
+    # ── Configure Plimsoll Firewall ──
     # Build demo config first to get the right thresholds
     # (starting_balance updated after funding check in live mode)
     starting_balance = 0.0
@@ -1088,8 +1088,8 @@ def main() -> None:
         legit_addr=hacker_addr,  # In live mode, vendor = wallet B too
     )
 
-    firewall = AegisFirewall(
-        config=AegisConfig(
+    firewall = PlimsollFirewall(
+        config=PlimsollConfig(
             trajectory=TrajectoryHashConfig(
                 max_duplicates=2,
                 window_seconds=60.0,
@@ -1147,7 +1147,7 @@ def main() -> None:
     mode = (
         "LIVE — real Sepolia transactions (two-wallet mode)"
         if args.live
-        else "DRY-RUN (simulated chain, real LLM + real Aegis)"
+        else "DRY-RUN (simulated chain, real LLM + real Plimsoll)"
     )
     print(f"  {DIM}Mode:     {mode}{RESET}")
     model_label = args.model
@@ -1160,7 +1160,7 @@ def main() -> None:
         print(f"  {DIM}Balance:  {cfg.starting_balance:.6f} ETH{RESET}")
     else:
         print(f"  {DIM}Balance:  $10,000.00 USDC (simulated){RESET}")
-    print(f"  {GREEN}[VAULT]{RESET} Private key encrypted in Aegis enclave")
+    print(f"  {GREEN}[VAULT]{RESET} Private key encrypted in Plimsoll enclave")
     print(f"  {GREEN}[VAULT]{RESET} LLM context window has ZERO access to key material")
 
     if args.live:

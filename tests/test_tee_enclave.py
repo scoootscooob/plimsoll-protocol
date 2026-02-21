@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import time
 
-from aegis.enclave.tee import (
+from plimsoll.enclave.tee import (
     TEEEnclave,
     TEEConfig,
     TEEBackend,
     SoftwareBackend,
     AttestationReport,
 )
-from aegis.verdict import VerdictCode
+from plimsoll.verdict import VerdictCode
 
 
 # ── SoftwareBackend tests ────────────────────────────────────────

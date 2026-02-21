@@ -1,5 +1,5 @@
 /**
- * Wagmi + ConnectKit configuration for Aegis dApp.
+ * Wagmi + ConnectKit configuration for Plimsoll dApp.
  */
 
 import { getDefaultConfig } from "connectkit";
@@ -21,8 +21,8 @@ export const config = createConfig(
     },
     walletConnectProjectId:
       process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || "",
-    appName: "Aegis Capital Delegation",
+    appName: "Plimsoll Capital Delegation",
     appDescription: "Manage AI agent vaults with on-chain physics enforcement",
-    appUrl: "https://aegis.network",
+    appUrl: "https://plimsoll.network",
   })
 );

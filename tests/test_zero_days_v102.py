@@ -11,10 +11,10 @@ from __future__ import annotations
 import time
 import pytest
 
-from aegis.enclave.vault import AegisEnforcementError, KeyVault
-from aegis.engines.capital_velocity import CapitalVelocityConfig
-from aegis.firewall import AegisConfig, AegisFirewall
-from aegis.verdict import Verdict, VerdictCode
+from plimsoll.enclave.vault import PlimsollEnforcementError, KeyVault
+from plimsoll.engines.capital_velocity import CapitalVelocityConfig
+from plimsoll.firewall import PlimsollConfig, PlimsollFirewall
+from plimsoll.verdict import Verdict, VerdictCode
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -119,20 +119,20 @@ class TestCrossChainReplayDefense:
         assert sig
 
     def test_chain_id_mismatch_blocked(self):
-        """Mismatched chainId raises AegisEnforcementError."""
+        """Mismatched chainId raises PlimsollEnforcementError."""
         vault = self._make_vault(chain_id=1)
         data = self._make_typed_data(chain_id=42)  # Wrong chain!
-        with pytest.raises(AegisEnforcementError) as exc:
+        with pytest.raises(PlimsollEnforcementError) as exc:
             vault.sign_typed_data("test_key", data)
         assert "BLOCK_CROSS_CHAIN_REPLAY" in str(exc.value.code)
         assert "42" in exc.value.reason
         assert "1" in exc.value.reason
 
     def test_chain_id_missing_blocked(self):
-        """Missing chainId in domain raises AegisEnforcementError."""
+        """Missing chainId in domain raises PlimsollEnforcementError."""
         vault = self._make_vault(chain_id=1)
         data = self._make_typed_data(include_chain_id=False)
-        with pytest.raises(AegisEnforcementError) as exc:
+        with pytest.raises(PlimsollEnforcementError) as exc:
             vault.sign_typed_data("test_key", data)
         assert "BLOCK_CROSS_CHAIN_REPLAY" in str(exc.value.code)
         assert "MISSING" in exc.value.reason
@@ -141,7 +141,7 @@ class TestCrossChainReplayDefense:
         """chainId=0 (wildcard) is rejected."""
         vault = self._make_vault(chain_id=1)
         data = self._make_typed_data(chain_id=0)
-        with pytest.raises(AegisEnforcementError) as exc:
+        with pytest.raises(PlimsollEnforcementError) as exc:
             vault.sign_typed_data("test_key", data)
         assert "BLOCK_CROSS_CHAIN_REPLAY" in str(exc.value.code)
         assert "wildcard" in exc.value.reason.lower() or "0" in exc.value.reason
@@ -164,7 +164,7 @@ class TestCrossChainReplayDefense:
         """chainId='0xa' (10) doesn't match expected=1."""
         vault = self._make_vault(chain_id=1)
         data = self._make_typed_data(chain_id="0xa")
-        with pytest.raises(AegisEnforcementError):
+        with pytest.raises(PlimsollEnforcementError):
             vault.sign_typed_data("test_key", data)
 
     def test_set_expected_chain_id_rejects_zero(self):
@@ -183,7 +183,7 @@ class TestCrossChainReplayDefense:
         """Unparseable chainId is rejected."""
         vault = self._make_vault(chain_id=1)
         data = self._make_typed_data(chain_id="not_a_number")
-        with pytest.raises(AegisEnforcementError) as exc:
+        with pytest.raises(PlimsollEnforcementError) as exc:
             vault.sign_typed_data("test_key", data)
         assert "BLOCK_CROSS_CHAIN_REPLAY" in str(exc.value.code)
 
@@ -199,7 +199,7 @@ class TestCrossChainReplayDefense:
             "types": {"Permit": [{"name": "spender", "type": "address"}]},
             "message": {"spender": "0xDEAD", "value": "100"},
         }
-        with pytest.raises(AegisEnforcementError) as exc:
+        with pytest.raises(PlimsollEnforcementError) as exc:
             vault.sign_typed_data("test_key", data)
         # Should be CROSS_CHAIN_REPLAY, not EIP712_PERMIT
         assert "BLOCK_CROSS_CHAIN_REPLAY" in str(exc.value.code)
@@ -211,15 +211,15 @@ class TestCrossChainReplayDefense:
 
 
 class TestPaymasterSlashingDefense:
-    """Verify revert tracking and Paymaster sever in AegisFirewall."""
+    """Verify revert tracking and Paymaster sever in PlimsollFirewall."""
 
     def _make_firewall(
         self,
         revert_max: int = 3,
         revert_window: float = 60.0,
-    ) -> AegisFirewall:
-        return AegisFirewall(
-            config=AegisConfig(
+    ) -> PlimsollFirewall:
+        return PlimsollFirewall(
+            config=PlimsollConfig(
                 revert_strike_max=revert_max,
                 revert_strike_window_secs=revert_window,
                 enable_vault=False,
@@ -231,7 +231,7 @@ class TestPaymasterSlashingDefense:
 
     def test_revert_disabled_by_default(self):
         """Default revert_strike_max=0 means feature is disabled."""
-        fw = AegisFirewall(config=AegisConfig(enable_vault=False))
+        fw = PlimsollFirewall(config=PlimsollConfig(enable_vault=False))
         assert fw.config.revert_strike_max == 0
         # record_revert should be a no-op
         fw.record_revert()
@@ -313,8 +313,8 @@ class TestPaymasterSlashingDefense:
         def on_sever():
             callback_fired.append(True)
 
-        fw = AegisFirewall(
-            config=AegisConfig(
+        fw = PlimsollFirewall(
+            config=PlimsollConfig(
                 revert_strike_max=2,
                 revert_strike_window_secs=60.0,
                 on_paymaster_sever=on_sever,
@@ -333,8 +333,8 @@ class TestPaymasterSlashingDefense:
         def bad_callback():
             raise RuntimeError("Webhook error!")
 
-        fw = AegisFirewall(
-            config=AegisConfig(
+        fw = PlimsollFirewall(
+            config=PlimsollConfig(
                 revert_strike_max=1,
                 on_paymaster_sever=bad_callback,
                 enable_vault=False,
@@ -374,8 +374,8 @@ class TestPaymasterSlashingDefense:
 
     def test_paymaster_sever_before_cognitive_sever(self):
         """Paymaster sever check runs in evaluate() and catches before engines."""
-        fw = AegisFirewall(
-            config=AegisConfig(
+        fw = PlimsollFirewall(
+            config=PlimsollConfig(
                 revert_strike_max=1,
                 cognitive_sever_enabled=True,
                 strike_max=100,  # High so cognitive sever doesn't trigger
@@ -415,17 +415,17 @@ class TestBackwardCompatibility:
 
     def test_default_config_revert_disabled(self):
         """Default config has revert_strike_max=0 (disabled)."""
-        cfg = AegisConfig()
+        cfg = PlimsollConfig()
         assert cfg.revert_strike_max == 0
 
     def test_default_config_cognitive_sever_disabled(self):
         """Default config has cognitive_sever_enabled=False."""
-        cfg = AegisConfig()
+        cfg = PlimsollConfig()
         assert not cfg.cognitive_sever_enabled
 
     def test_existing_functionality_unaffected(self):
         """Basic firewall functionality still works with v1.0.2 additions."""
-        fw = AegisFirewall(config=AegisConfig(enable_vault=False))
+        fw = PlimsollFirewall(config=PlimsollConfig(enable_vault=False))
         payload = {"target": "0x1234", "amount": 10.0}
 
         v = fw.evaluate(payload, spend_amount=10.0)
@@ -463,8 +463,8 @@ class TestV102Integration:
         """All v1.0.2 features can be enabled simultaneously."""
         callback_log = []
 
-        fw = AegisFirewall(
-            config=AegisConfig(
+        fw = PlimsollFirewall(
+            config=PlimsollConfig(
                 revert_strike_max=3,
                 revert_strike_window_secs=300.0,
                 on_paymaster_sever=lambda: callback_log.append("paymaster"),
@@ -482,8 +482,8 @@ class TestV102Integration:
 
     def test_paymaster_sever_plus_vault_chain_id(self):
         """Paymaster sever and chainId validation coexist."""
-        fw = AegisFirewall(
-            config=AegisConfig(
+        fw = PlimsollFirewall(
+            config=PlimsollConfig(
                 revert_strike_max=2,
                 enable_vault=True,
             )
@@ -500,7 +500,7 @@ class TestV102Integration:
             "types": {"Transfer": [{"name": "to", "type": "address"}]},
             "message": {"to": "0x1234"},
         }
-        with pytest.raises(AegisEnforcementError):
+        with pytest.raises(PlimsollEnforcementError):
             fw.vault.sign_typed_data("key1", data)
 
         # Paymaster sever also works
@@ -510,8 +510,8 @@ class TestV102Integration:
 
     def test_sever_counted_in_history(self):
         """Paymaster sever verdicts appear in firewall history."""
-        fw = AegisFirewall(
-            config=AegisConfig(
+        fw = PlimsollFirewall(
+            config=PlimsollConfig(
                 revert_strike_max=1,
                 enable_vault=False,
             )

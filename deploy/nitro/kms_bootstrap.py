@@ -1,5 +1,5 @@
 """
-Aegis Nitro Enclave — KMS Bootstrap (PCR0-Attested Key Injection).
+Plimsoll Nitro Enclave — KMS Bootstrap (PCR0-Attested Key Injection).
 
 Solves the "God Key" flaw: the $50M private key must NEVER exist on the
 host OS.  Instead, the key is:
@@ -66,7 +66,7 @@ import socket
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
-logger = logging.getLogger("aegis.kms_bootstrap")
+logger = logging.getLogger("plimsoll.kms_bootstrap")
 
 
 # ── Configuration ────────────────────────────────────────────────
@@ -83,14 +83,14 @@ class KMSBootstrapConfig:
 
     # Path to store the encrypted key blob on the host filesystem.
     # This file is useless without the enclave to decrypt it.
-    encrypted_blob_path: str = "/opt/aegis/encrypted_key.blob"
+    encrypted_blob_path: str = "/opt/plimsoll/encrypted_key.blob"
 
     # Expected PCR0 hash of the enclave image (SHA-384, hex).
     # This is set at build time by `nitro-cli describe-eif`.
     expected_pcr0: str = ""
 
     # Key derivation: HKDF info string for deterministic derivation.
-    hkdf_info: str = "aegis-vault-signing-key-v2"
+    hkdf_info: str = "plimsoll-vault-signing-key-v2"
 
     # Vsock port for host ↔ enclave communication.
     vsock_port: int = 5000
@@ -153,7 +153,7 @@ def get_attestation_document() -> AttestationDocument:
             #   nsm.nsm_exit(fd)
             #
             # Placeholder: read PCR0 from environment (set by enclave init)
-            pcr0 = os.environ.get("AEGIS_PCR0", "")
+            pcr0 = os.environ.get("PLIMSOLL_PCR0", "")
             return AttestationDocument(
                 pcr0=pcr0,
                 raw_document=b"real-nsm-attestation",
@@ -164,7 +164,7 @@ def get_attestation_document() -> AttestationDocument:
     else:
         # Outside enclave — synthetic document for dev/test.
         logger.warning("NSM device not found — using synthetic attestation")
-        synthetic_pcr0 = hashlib.sha384(b"aegis-dev-enclave-image").hexdigest()
+        synthetic_pcr0 = hashlib.sha384(b"plimsoll-dev-enclave-image").hexdigest()
         return AttestationDocument(
             pcr0=synthetic_pcr0,
             raw_document=b"synthetic-dev-attestation",
@@ -264,7 +264,7 @@ class KMSKeyManager:
         import hmac
         # Extract phase
         prk = hmac.new(
-            key=b"aegis-hkdf-salt-v2",
+            key=b"plimsoll-hkdf-salt-v2",
             msg=self._plaintext_key,
             digestmod=hashlib.sha256,
         ).digest()
@@ -345,7 +345,7 @@ class TurnkeyKeyManager:
         # In production, use the Turnkey Python SDK:
         #   from turnkey import Turnkey
         #   client = Turnkey(api_key=config.turnkey_api_key, org_id=config.turnkey_org_id)
-        #   wallet = client.wallets.create(name="aegis-vault", ...)
+        #   wallet = client.wallets.create(name="plimsoll-vault", ...)
         #   return wallet.id
 
         # Placeholder for SDK integration
@@ -418,10 +418,10 @@ def create_key_manager(
     """Create the appropriate key manager based on config."""
     if config is None:
         config = KMSBootstrapConfig(
-            kms_key_arn=os.environ.get("AEGIS_KMS_KEY_ARN", ""),
+            kms_key_arn=os.environ.get("PLIMSOLL_KMS_KEY_ARN", ""),
             aws_region=os.environ.get("AWS_REGION", "us-east-1"),
-            expected_pcr0=os.environ.get("AEGIS_ENCLAVE_PCR0", ""),
-            provider=os.environ.get("AEGIS_KEY_PROVIDER", "kms"),
+            expected_pcr0=os.environ.get("PLIMSOLL_ENCLAVE_PCR0", ""),
+            provider=os.environ.get("PLIMSOLL_KEY_PROVIDER", "kms"),
             turnkey_org_id=os.environ.get("TURNKEY_ORG_ID", ""),
             turnkey_api_key=os.environ.get("TURNKEY_API_KEY", ""),
         )

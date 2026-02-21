@@ -3,13 +3,13 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "aegis-protocol"
+name = "plimsoll-protocol"
 version = "2.0.0"
 description = "Deterministic circuit breaker for autonomous AI agents. The financial seatbelt for the machine economy."
 requires-python = ">=3.9"
 license = "MIT"
 authors = [
-    { name = "Aegis Protocol" },
+    { name = "Plimsoll Protocol" },
 ]
 keywords = ["ai-agents", "circuit-breaker", "web3", "defi", "safety"]
 classifiers = [
@@ -55,10 +55,10 @@ oracles = [
 ]
 
 [project.scripts]
-aegis = "aegis.cli.main:main"
+plimsoll = "plimsoll.cli.main:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["aegis"]
+packages = ["plimsoll"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

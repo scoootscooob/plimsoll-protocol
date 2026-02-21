@@ -1,4 +1,4 @@
-//! Database schema and configuration for the Aegis Fleet Indexer.
+//! Database schema and configuration for the Plimsoll Fleet Indexer.
 //!
 //! Defines the universal event schema that normalizes events from
 //! Ethereum, Solana, and future chains into a single queryable format.
@@ -22,7 +22,7 @@ pub struct ChainConfig {
     pub ws_url: String,
     /// HTTP RPC endpoint for historical backfill.
     pub http_url: String,
-    /// AegisVault contract address (EVM) or program ID (Solana).
+    /// PlimsollVault contract address (EVM) or program ID (Solana).
     pub contract_address: String,
     /// Block to start indexing from (0 = latest).
     pub start_block: u64,
@@ -47,17 +47,17 @@ impl IndexerConfig {
     /// Load configuration from environment variables.
     ///
     /// Example env vars:
-    ///   DATABASE_URL=postgres://user:pass@localhost/aegis
-    ///   AEGIS_CHAINS=ethereum,base,solana
-    ///   AEGIS_CHAIN_ETHEREUM_WS=wss://eth-mainnet.ws.alchemyapi.io/v2/KEY
-    ///   AEGIS_CHAIN_ETHEREUM_HTTP=https://eth-mainnet.g.alchemy.com/v2/KEY
-    ///   AEGIS_CHAIN_ETHEREUM_CONTRACT=0x...
-    ///   AEGIS_CHAIN_ETHEREUM_ID=1
+    ///   DATABASE_URL=postgres://user:pass@localhost/plimsoll
+    ///   PLIMSOLL_CHAINS=ethereum,base,solana
+    ///   PLIMSOLL_CHAIN_ETHEREUM_WS=wss://eth-mainnet.ws.alchemyapi.io/v2/KEY
+    ///   PLIMSOLL_CHAIN_ETHEREUM_HTTP=https://eth-mainnet.g.alchemy.com/v2/KEY
+    ///   PLIMSOLL_CHAIN_ETHEREUM_CONTRACT=0x...
+    ///   PLIMSOLL_CHAIN_ETHEREUM_ID=1
     pub fn from_env() -> Self {
         let database_url = env::var("DATABASE_URL")
-            .unwrap_or_else(|_| "postgres://localhost/aegis_indexer".into());
+            .unwrap_or_else(|_| "postgres://localhost/plimsoll_indexer".into());
 
-        let chain_names: Vec<String> = env::var("AEGIS_CHAINS")
+        let chain_names: Vec<String> = env::var("PLIMSOLL_CHAINS")
             .unwrap_or_else(|_| "ethereum".into())
             .split(',')
             .map(|s| s.trim().to_lowercase())
@@ -66,7 +66,7 @@ impl IndexerConfig {
         let chains: Vec<ChainConfig> = chain_names
             .iter()
             .map(|name| {
-                let prefix = format!("AEGIS_CHAIN_{}", name.to_uppercase());
+                let prefix = format!("PLIMSOLL_CHAIN_{}", name.to_uppercase());
                 ChainConfig {
                     name: name.clone(),
                     chain_type: env::var(format!("{}_TYPE", prefix))
@@ -98,11 +98,11 @@ impl IndexerConfig {
         IndexerConfig {
             database_url,
             chains,
-            batch_size: env::var("AEGIS_BATCH_SIZE")
+            batch_size: env::var("PLIMSOLL_BATCH_SIZE")
                 .unwrap_or_else(|_| "100".into())
                 .parse()
                 .unwrap_or(100),
-            flush_interval_ms: env::var("AEGIS_FLUSH_INTERVAL_MS")
+            flush_interval_ms: env::var("PLIMSOLL_FLUSH_INTERVAL_MS")
                 .unwrap_or_else(|_| "500".into())
                 .parse()
                 .unwrap_or(500),
@@ -171,7 +171,7 @@ pub enum EventType {
 ///
 /// This is the core data model that maps every chain-specific event
 /// into a single queryable schema.  The React dashboard reads from
-/// the `aegis_events` table populated with these records.
+/// the `plimsoll_events` table populated with these records.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IndexedEvent {
     // ── Identity ─────────────────────────────────────────────
@@ -228,10 +228,10 @@ impl IndexedEvent {
 /// The composite index on (vault_address, chain_id, block_timestamp)
 /// enables the dashboard to load 5,000 agents in <40ms.
 pub const CREATE_SCHEMA_SQL: &str = r#"
--- Aegis Fleet Indexer — PostgreSQL Schema
+-- Plimsoll Fleet Indexer — PostgreSQL Schema
 -- Partitioned by chain_id for multi-chain query performance.
 
-CREATE TABLE IF NOT EXISTS aegis_events (
+CREATE TABLE IF NOT EXISTS plimsoll_events (
     id                TEXT PRIMARY KEY,
     chain_name        TEXT NOT NULL,
     chain_id          BIGINT NOT NULL,
@@ -251,34 +251,34 @@ CREATE TABLE IF NOT EXISTS aegis_events (
 ) PARTITION BY LIST (chain_id);
 
 -- Partitions for each supported chain
-CREATE TABLE IF NOT EXISTS aegis_events_ethereum PARTITION OF aegis_events
+CREATE TABLE IF NOT EXISTS plimsoll_events_ethereum PARTITION OF plimsoll_events
     FOR VALUES IN (1);
-CREATE TABLE IF NOT EXISTS aegis_events_base PARTITION OF aegis_events
+CREATE TABLE IF NOT EXISTS plimsoll_events_base PARTITION OF plimsoll_events
     FOR VALUES IN (8453);
-CREATE TABLE IF NOT EXISTS aegis_events_arbitrum PARTITION OF aegis_events
+CREATE TABLE IF NOT EXISTS plimsoll_events_arbitrum PARTITION OF plimsoll_events
     FOR VALUES IN (42161);
-CREATE TABLE IF NOT EXISTS aegis_events_polygon PARTITION OF aegis_events
+CREATE TABLE IF NOT EXISTS plimsoll_events_polygon PARTITION OF plimsoll_events
     FOR VALUES IN (137);
-CREATE TABLE IF NOT EXISTS aegis_events_optimism PARTITION OF aegis_events
+CREATE TABLE IF NOT EXISTS plimsoll_events_optimism PARTITION OF plimsoll_events
     FOR VALUES IN (10);
-CREATE TABLE IF NOT EXISTS aegis_events_solana PARTITION OF aegis_events
+CREATE TABLE IF NOT EXISTS plimsoll_events_solana PARTITION OF plimsoll_events
     FOR VALUES IN (0);
 
 -- Default partition for unknown chains
-CREATE TABLE IF NOT EXISTS aegis_events_default PARTITION OF aegis_events
+CREATE TABLE IF NOT EXISTS plimsoll_events_default PARTITION OF plimsoll_events
     DEFAULT;
 
 -- Indexes for dashboard queries (<40ms for 5,000 agents)
 CREATE INDEX IF NOT EXISTS idx_events_vault_chain_time
-    ON aegis_events (vault_address, chain_id, block_timestamp DESC);
+    ON plimsoll_events (vault_address, chain_id, block_timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_events_agent_time
-    ON aegis_events (agent_address, block_timestamp DESC);
+    ON plimsoll_events (agent_address, block_timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_events_type_time
-    ON aegis_events (event_type, block_timestamp DESC);
+    ON plimsoll_events (event_type, block_timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_events_tx_hash
-    ON aegis_events (tx_hash);
+    ON plimsoll_events (tx_hash);
 CREATE INDEX IF NOT EXISTS idx_events_block_number
-    ON aegis_events (chain_id, block_number DESC);
+    ON plimsoll_events (chain_id, block_number DESC);
 
 -- Materialized view for real-time agent statistics
 -- Refresh every 10 seconds via pg_cron or application-level timer
@@ -293,7 +293,7 @@ SELECT
     COALESCE(SUM(amount_usd) FILTER (WHERE event_type = 'ExecutionApproved'), 0) AS total_spend_usd,
     MAX(block_timestamp) AS last_activity,
     COUNT(DISTINCT DATE_TRUNC('day', block_timestamp)) AS active_days
-FROM aegis_events
+FROM plimsoll_events
 WHERE agent_address != ''
 GROUP BY vault_address, agent_address, chain_id, chain_name;
 
@@ -388,9 +388,9 @@ mod tests {
     #[test]
     fn test_sql_schema_contains_partitions() {
         assert!(CREATE_SCHEMA_SQL.contains("PARTITION BY LIST (chain_id)"));
-        assert!(CREATE_SCHEMA_SQL.contains("aegis_events_ethereum"));
-        assert!(CREATE_SCHEMA_SQL.contains("aegis_events_base"));
-        assert!(CREATE_SCHEMA_SQL.contains("aegis_events_solana"));
+        assert!(CREATE_SCHEMA_SQL.contains("plimsoll_events_ethereum"));
+        assert!(CREATE_SCHEMA_SQL.contains("plimsoll_events_base"));
+        assert!(CREATE_SCHEMA_SQL.contains("plimsoll_events_solana"));
     }
 
     #[test]

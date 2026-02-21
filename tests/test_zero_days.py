@@ -11,9 +11,9 @@ from __future__ import annotations
 import time
 import pytest
 
-from aegis.engines.asset_guard import AssetGuardConfig, AssetGuardEngine, OracleResult
-from aegis.engines.threat_feed import ThreatFeedConfig, ThreatFeedEngine
-from aegis.verdict import VerdictCode
+from plimsoll.engines.asset_guard import AssetGuardConfig, AssetGuardEngine, OracleResult
+from plimsoll.engines.threat_feed import ThreatFeedConfig, ThreatFeedEngine
+from plimsoll.verdict import VerdictCode
 
 
 # ═════════════════════════════════════════════════════════════════════

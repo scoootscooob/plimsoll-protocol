@@ -1,8 +1,8 @@
 {
-  "name": "aegis-dapp",
+  "name": "plimsoll-dapp",
   "version": "0.5.0",
   "private": true,
-  "description": "Aegis Capital Delegation dApp — Manage AI agent vaults with on-chain physics",
+  "description": "Plimsoll Capital Delegation dApp — Manage AI agent vaults with on-chain physics",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

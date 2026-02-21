@@ -1,4 +1,4 @@
-# Aegis Nitro Enclave — Terraform deployment for AWS.
+# Plimsoll Nitro Enclave — Terraform deployment for AWS.
 #
 # Creates a VPC with private subnet, an EC2 instance with Nitro Enclave
 # support, IAM roles for PCR0-attested KMS access, optional dedicated
@@ -30,23 +30,23 @@ provider "aws" {
 
 # ── VPC ──────────────────────────────────────────────────────────
 
-resource "aws_vpc" "aegis" {
+resource "aws_vpc" "plimsoll" {
   cidr_block           = "10.0.0.0/16"
   enable_dns_hostnames = true
   enable_dns_support   = true
 
   tags = {
-    Name = "aegis-nitro-vpc"
+    Name = "plimsoll-nitro-vpc"
   }
 }
 
 resource "aws_subnet" "private" {
-  vpc_id            = aws_vpc.aegis.id
+  vpc_id            = aws_vpc.plimsoll.id
   cidr_block        = "10.0.1.0/24"
   availability_zone = "${var.aws_region}a"
 
   tags = {
-    Name = "aegis-nitro-private"
+    Name = "plimsoll-nitro-private"
   }
 }
 
@@ -56,23 +56,23 @@ resource "aws_subnet" "private" {
 # KMS traffic stays entirely within the AWS network.
 
 resource "aws_vpc_endpoint" "kms" {
-  vpc_id              = aws_vpc.aegis.id
+  vpc_id              = aws_vpc.plimsoll.id
   service_name        = "com.amazonaws.${var.aws_region}.kms"
   vpc_endpoint_type   = "Interface"
   subnet_ids          = [aws_subnet.private.id]
-  security_group_ids  = [aws_security_group.aegis_enclave.id]
+  security_group_ids  = [aws_security_group.plimsoll_enclave.id]
   private_dns_enabled = true
 
   tags = {
-    Name = "aegis-kms-endpoint"
+    Name = "plimsoll-kms-endpoint"
   }
 }
 
 # ── Security Group ───────────────────────────────────────────────
 
-resource "aws_security_group" "aegis_enclave" {
-  name_prefix = "aegis-enclave-"
-  vpc_id      = aws_vpc.aegis.id
+resource "aws_security_group" "plimsoll_enclave" {
+  name_prefix = "plimsoll-enclave-"
+  vpc_id      = aws_vpc.plimsoll.id
 
   # No inbound access from the internet (enclave is isolated)
   # Outbound: HTTPS only — KMS VPC endpoint
@@ -94,7 +94,7 @@ resource "aws_security_group" "aegis_enclave" {
   }
 
   tags = {
-    Name = "aegis-enclave-sg"
+    Name = "plimsoll-enclave-sg"
   }
 }
 
@@ -104,14 +104,14 @@ resource "aws_security_group" "aegis_enclave" {
 # with the expected PCR0 hash.  Even an AWS admin cannot decrypt
 # without the enclave.
 
-resource "aws_kms_key" "aegis_enclave" {
+resource "aws_kms_key" "plimsoll_enclave" {
   count               = var.create_kms_key ? 1 : 0
-  description         = "Aegis Nitro Enclave signing key — PCR0-gated"
+  description         = "Plimsoll Nitro Enclave signing key — PCR0-gated"
   enable_key_rotation = true
 
   policy = jsonencode({
     Version = "2012-10-17"
-    Id      = "aegis-enclave-key-policy"
+    Id      = "plimsoll-enclave-key-policy"
     Statement = [
       {
         Sid    = "EnableRootAccountAccess"
@@ -126,7 +126,7 @@ resource "aws_kms_key" "aegis_enclave" {
         Sid    = "AllowEnclaveDecrypt"
         Effect = "Allow"
         Principal = {
-          AWS = aws_iam_role.aegis_enclave.arn
+          AWS = aws_iam_role.plimsoll_enclave.arn
         }
         Action = [
           "kms:Decrypt",
@@ -159,22 +159,22 @@ resource "aws_kms_key" "aegis_enclave" {
   })
 
   tags = {
-    Name = "aegis-enclave-cmk"
+    Name = "plimsoll-enclave-cmk"
   }
 }
 
-resource "aws_kms_alias" "aegis_enclave" {
+resource "aws_kms_alias" "plimsoll_enclave" {
   count         = var.create_kms_key ? 1 : 0
-  name          = "alias/aegis-enclave-signing-key"
-  target_key_id = aws_kms_key.aegis_enclave[0].key_id
+  name          = "alias/plimsoll-enclave-signing-key"
+  target_key_id = aws_kms_key.plimsoll_enclave[0].key_id
 }
 
 data "aws_caller_identity" "current" {}
 
 # ── IAM Role ─────────────────────────────────────────────────────
 
-resource "aws_iam_role" "aegis_enclave" {
-  name = "aegis-nitro-enclave-role"
+resource "aws_iam_role" "plimsoll_enclave" {
+  name = "plimsoll-nitro-enclave-role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -191,8 +191,8 @@ resource "aws_iam_role" "aegis_enclave" {
 }
 
 resource "aws_iam_role_policy" "kms_access" {
-  name = "aegis-kms-access"
-  role = aws_iam_role.aegis_enclave.id
+  name = "plimsoll-kms-access"
+  role = aws_iam_role.plimsoll_enclave.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -216,30 +216,30 @@ resource "aws_iam_role_policy" "kms_access" {
         Sid      = "AllowS3BlobStorage"
         Effect   = "Allow"
         Action   = ["s3:GetObject", "s3:PutObject"]
-        Resource = var.encrypted_blob_s3_bucket != "" ? ["arn:aws:s3:::${var.encrypted_blob_s3_bucket}/aegis/*"] : ["arn:aws:s3:::dummy/*"]
+        Resource = var.encrypted_blob_s3_bucket != "" ? ["arn:aws:s3:::${var.encrypted_blob_s3_bucket}/plimsoll/*"] : ["arn:aws:s3:::dummy/*"]
       }
     ]
   })
 }
 
 locals {
-  kms_key_arn = var.create_kms_key ? aws_kms_key.aegis_enclave[0].arn : var.kms_key_arn
+  kms_key_arn = var.create_kms_key ? aws_kms_key.plimsoll_enclave[0].arn : var.kms_key_arn
 }
 
-resource "aws_iam_instance_profile" "aegis_enclave" {
-  name = "aegis-nitro-enclave-profile"
-  role = aws_iam_role.aegis_enclave.name
+resource "aws_iam_instance_profile" "plimsoll_enclave" {
+  name = "plimsoll-nitro-enclave-profile"
+  role = aws_iam_role.plimsoll_enclave.name
 }
 
 # ── EC2 Instance ─────────────────────────────────────────────────
 
-resource "aws_instance" "aegis_enclave" {
+resource "aws_instance" "plimsoll_enclave" {
   ami                    = var.ami_id
   instance_type          = var.instance_type
   key_name               = var.key_pair_name
   subnet_id              = aws_subnet.private.id
-  vpc_security_group_ids = [aws_security_group.aegis_enclave.id]
-  iam_instance_profile   = aws_iam_instance_profile.aegis_enclave.name
+  vpc_security_group_ids = [aws_security_group.plimsoll_enclave.id]
+  iam_instance_profile   = aws_iam_instance_profile.plimsoll_enclave.name
 
   enclave_options {
     enabled = true
@@ -270,26 +270,26 @@ resource "aws_instance" "aegis_enclave" {
     systemctl restart nitro-enclaves-allocator.service
 
     # ── Set environment for KMS bootstrap ──────────────────────
-    mkdir -p /opt/aegis
-    cat > /opt/aegis/enclave.env <<ENVFILE
-    AEGIS_KMS_KEY_ARN=${local.kms_key_arn}
+    mkdir -p /opt/plimsoll
+    cat > /opt/plimsoll/enclave.env <<ENVFILE
+    PLIMSOLL_KMS_KEY_ARN=${local.kms_key_arn}
     AWS_REGION=${var.aws_region}
-    AEGIS_ENCLAVE_PCR0=${var.enclave_pcr0}
-    AEGIS_KEY_PROVIDER=${var.key_provider}
+    PLIMSOLL_ENCLAVE_PCR0=${var.enclave_pcr0}
+    PLIMSOLL_KEY_PROVIDER=${var.key_provider}
     ENVFILE
 
     # ── Build and run the enclave ──────────────────────────────
-    # The EIF (Enclave Image File) is pre-built and stored at /opt/aegis/aegis.eif
-    # Build command: nitro-cli build-enclave --docker-uri aegis-enclave:latest --output-file aegis.eif
+    # The EIF (Enclave Image File) is pre-built and stored at /opt/plimsoll/plimsoll.eif
+    # Build command: nitro-cli build-enclave --docker-uri plimsoll-enclave:latest --output-file plimsoll.eif
     nitro-cli run-enclave \
-      --eif-path /opt/aegis/aegis.eif \
+      --eif-path /opt/plimsoll/plimsoll.eif \
       --memory 512 \
       --cpu-count 2
 
-    echo "Aegis Nitro Enclave running — PCR0-attested KMS bootstrap active"
+    echo "Plimsoll Nitro Enclave running — PCR0-attested KMS bootstrap active"
   EOF
 
   tags = {
-    Name = "aegis-nitro-enclave"
+    Name = "plimsoll-nitro-enclave"
   }
 }

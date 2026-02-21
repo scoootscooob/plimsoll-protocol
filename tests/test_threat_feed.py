@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import pytest
-from aegis.engines.threat_feed import (
+from plimsoll.engines.threat_feed import (
     ThreatFeedEngine,
     ThreatFeedConfig,
     IMMUNE_PROTOCOLS,
 )
-from aegis.verdict import VerdictCode
-from aegis.firewall import AegisFirewall, AegisConfig
+from plimsoll.verdict import VerdictCode
+from plimsoll.firewall import PlimsollFirewall, PlimsollConfig
 
 
 # ── Unit tests: ThreatFeedEngine ──────────────────────────────────────
@@ -232,15 +232,15 @@ class TestFirewallIntegration:
 
     def test_disabled_by_default_no_impact(self):
         """Default config has threat_feed disabled — zero behavioral change."""
-        fw = AegisFirewall()
+        fw = PlimsollFirewall()
         v = fw.evaluate({"target": "0xAnything", "amount": 100}, spend_amount=100)
         assert v.allowed
 
     def test_enabled_blocks_blacklisted_address(self):
-        cfg = AegisConfig(
+        cfg = PlimsollConfig(
             threat_feed=ThreatFeedConfig(enabled=True),
         )
-        fw = AegisFirewall(config=cfg)
+        fw = PlimsollFirewall(config=cfg)
         fw.threat_feed.add_address("0xDrainer666")
         fw.threat_feed._version = 5
         fw.threat_feed._consensus_count = 25
@@ -252,10 +252,10 @@ class TestFirewallIntegration:
 
     def test_engine0_runs_before_trajectory(self):
         """Engine 0 should catch threats before Engine 1 even sees them."""
-        cfg = AegisConfig(
+        cfg = PlimsollConfig(
             threat_feed=ThreatFeedConfig(enabled=True),
         )
-        fw = AegisFirewall(config=cfg)
+        fw = PlimsollFirewall(config=cfg)
         fw.threat_feed.add_address("0xAttacker")
 
         # Same payload twice — if Engine 0 weren't first, Engine 1 (trajectory)
@@ -265,10 +265,10 @@ class TestFirewallIntegration:
 
     def test_immune_address_passes_through(self):
         """Immune protocols pass Engine 0 even if blacklisted."""
-        cfg = AegisConfig(
+        cfg = PlimsollConfig(
             threat_feed=ThreatFeedConfig(enabled=True),
         )
-        fw = AegisFirewall(config=cfg)
+        fw = PlimsollFirewall(config=cfg)
         uniswap = "0x7a250d5630b4cf539739df2c5dacb4c659f2488d"
         fw.threat_feed.add_address(uniswap)
 
@@ -277,19 +277,19 @@ class TestFirewallIntegration:
         assert v.code is not VerdictCode.BLOCK_GLOBAL_BLACKLIST
 
     def test_reset_clears_threat_feed(self):
-        cfg = AegisConfig(
+        cfg = PlimsollConfig(
             threat_feed=ThreatFeedConfig(enabled=True),
         )
-        fw = AegisFirewall(config=cfg)
+        fw = PlimsollFirewall(config=cfg)
         fw.threat_feed.add_address("0xBadGuy")
         fw.reset()
         assert fw.threat_feed.is_empty()
 
     def test_stats_includes_engine0_blocks(self):
-        cfg = AegisConfig(
+        cfg = PlimsollConfig(
             threat_feed=ThreatFeedConfig(enabled=True),
         )
-        fw = AegisFirewall(config=cfg)
+        fw = PlimsollFirewall(config=cfg)
         fw.threat_feed.add_address("0xBad")
         fw.evaluate({"target": "0xbad"})
         assert fw.stats["blocked"] == 1

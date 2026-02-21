@@ -1,4 +1,4 @@
-//! EVM Chain Listener — subscribes to AegisVault events on EVM chains.
+//! EVM Chain Listener — subscribes to PlimsollVault events on EVM chains.
 //!
 //! Connects to Ethereum, Base, Arbitrum, Polygon, etc. via WebSocket
 //! and translates raw Solidity events into `IndexedEvent` records.
@@ -11,7 +11,7 @@ use serde::Deserialize;
 use std::sync::Arc;
 use tracing::info;
 
-/// ABI event signatures for AegisVault.sol events (keccak256 topics).
+/// ABI event signatures for PlimsollVault.sol events (keccak256 topics).
 pub mod event_topics {
     /// ExecutionApproved(address indexed agent, address indexed target, uint256 value)
     pub const EXECUTION_APPROVED: &str =
@@ -166,7 +166,7 @@ impl EvmListener {
 fn classify_event(_topic0: &str) -> Option<EventType> {
     // In production, use proper keccak256 hashes for exact matching.
     // For now, return a default — the real implementation will match
-    // against exact keccak256 event signatures from AegisVault.sol ABI.
+    // against exact keccak256 event signatures from PlimsollVault.sol ABI.
     Some(EventType::ExecutionApproved)
 }
 
