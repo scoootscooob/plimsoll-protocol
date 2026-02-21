@@ -1,11 +1,14 @@
 """
-Aegis Nitro Enclave — vsock signing server.
+Aegis Nitro Enclave — vsock signing server with KMS bootstrap.
 
 Runs inside an AWS Nitro Enclave.  Receives transaction signing
 requests via vsock (the only permitted I/O channel), runs the full
 7-engine Aegis chain, and returns only the signature.
 
-The private key NEVER leaves the enclave.
+The private key NEVER leaves the enclave.  On boot, the enclave
+authenticates to AWS KMS using its PCR0 attestation document to
+receive the data key.  The signing key is derived via HKDF and
+exists ONLY in enclave RAM.
 
 Protocol (JSON over vsock):
   → {"action": "sign_eth", "key_id": "...", "tx_dict": {...}}
@@ -16,6 +19,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import socket
 import sys
 from typing import Any
@@ -78,6 +82,53 @@ def handle_request(
         return {"ok": False, "error": f"Unknown action: {action}"}
 
 
+def _bootstrap_kms_key(vault: KeyVault) -> None:
+    """Bootstrap the signing key via KMS PCR0-attested decryption.
+
+    This solves the "God Key" flaw: the private key is NEVER typed
+    into a .env file or passed via Docker.  Instead:
+      1. The enclave authenticates to KMS with its PCR0 hash.
+      2. KMS releases the data key ONLY to the attested enclave.
+      3. The signing key is derived via HKDF in enclave RAM.
+    """
+    try:
+        from kms_bootstrap import create_key_manager, KMSBootstrapConfig
+
+        kms_arn = os.environ.get("AEGIS_KMS_KEY_ARN", "")
+        if not kms_arn:
+            logger.warning(
+                "AEGIS_KMS_KEY_ARN not set — skipping KMS bootstrap. "
+                "Keys must be injected manually via store_key action."
+            )
+            return
+
+        config = KMSBootstrapConfig(
+            kms_key_arn=kms_arn,
+            aws_region=os.environ.get("AWS_REGION", "us-east-1"),
+            expected_pcr0=os.environ.get("AEGIS_ENCLAVE_PCR0", ""),
+            provider=os.environ.get("AEGIS_KEY_PROVIDER", "kms"),
+        )
+
+        manager = create_key_manager(config)
+        signing_key = manager.bootstrap()
+
+        # Store the derived key in the vault under the canonical ID
+        vault.store("aegis-primary", signing_key.hex())
+        logger.info(
+            "KMS bootstrap complete — signing key injected into vault "
+            "(key never touched host OS)"
+        )
+
+        # Zeroize the intermediate key material
+        manager.zeroize()
+
+    except ImportError:
+        logger.warning("kms_bootstrap module not available — skipping KMS bootstrap")
+    except Exception as exc:
+        logger.error("KMS bootstrap failed: %s", exc)
+        logger.warning("Falling back to manual key injection via store_key action")
+
+
 def main() -> None:
     """Start the vsock server."""
     logging.basicConfig(level=logging.INFO)
@@ -89,6 +140,12 @@ def main() -> None:
     vault = firewall.vault
 
     logger.info("Firewall + vault initialized (7 engines active)")
+
+    # ── KMS Bootstrap: PCR0-attested key injection ────────────────
+    # The private key is derived from a KMS data key that requires
+    # the enclave's PCR0 hash.  No human ever sees the plaintext.
+    _bootstrap_kms_key(vault)
+    logger.info("Key bootstrap phase complete")
 
     try:
         # Try real vsock first (only works inside Nitro Enclave)

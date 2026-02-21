@@ -1,0 +1,19 @@
+[features]
+seeds = false
+skip-lint = false
+
+[programs.localnet]
+aegis_vault = "AeG1sVau1tSo1anaProgramXXXXXXXXXXXXXXXXXX"
+
+[programs.devnet]
+aegis_vault = "AeG1sVau1tSo1anaProgramXXXXXXXXXXXXXXXXXX"
+
+[registry]
+url = "https://api.apr.dev"
+
+[provider]
+cluster = "Localnet"
+wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "anchor test"

@@ -1,0 +1,19 @@
+[package]
+name = "aegis-vault"
+version = "2.0.0"
+description = "Aegis Vault — Solana Anchor Program with PDA-gated agent execution"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "aegis_vault"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+
+[dependencies]
+anchor-lang = "0.30"

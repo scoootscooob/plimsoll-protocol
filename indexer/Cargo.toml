@@ -1,0 +1,17 @@
+[package]
+name = "aegis-indexer"
+version = "2.0.0"
+edition = "2021"
+description = "Aegis Fleet Indexer — multi-chain event indexer for the enterprise dashboard"
+
+[[bin]]
+name = "aegis-indexer"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"

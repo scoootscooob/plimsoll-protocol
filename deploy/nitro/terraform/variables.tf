@@ -24,13 +24,36 @@ variable "key_pair_name" {
 }
 
 variable "kms_key_arn" {
-  description = "ARN of the KMS key used by the enclave (empty = any key)"
+  description = "ARN of the KMS CMK used for PCR0-attested key wrapping"
   type        = string
   default     = ""
 }
 
 variable "enclave_pcr0" {
-  description = "PCR0 hash of the enclave image for KMS attestation policy"
+  description = "PCR0 hash (SHA-384) of the enclave image — gates KMS access"
+  type        = string
+  default     = ""
+}
+
+variable "create_kms_key" {
+  description = "If true, create a dedicated KMS CMK with PCR0 attestation policy"
+  type        = bool
+  default     = false
+}
+
+variable "key_provider" {
+  description = "Key management provider: 'kms' (AWS KMS) or 'turnkey' (MPC)"
+  type        = string
+  default     = "kms"
+
+  validation {
+    condition     = contains(["kms", "turnkey"], var.key_provider)
+    error_message = "key_provider must be 'kms' or 'turnkey'"
+  }
+}
+
+variable "encrypted_blob_s3_bucket" {
+  description = "S3 bucket for storing the encrypted key blob (optional, defaults to local EBS)"
   type        = string
   default     = ""
 }

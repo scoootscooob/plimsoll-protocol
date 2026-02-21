@@ -1,0 +1,8 @@
+[workspace]
+members = [
+    "programs/aegis-vault",
+]
+
+[profile.release]
+overflow-checks = true
+lto = "fat"
