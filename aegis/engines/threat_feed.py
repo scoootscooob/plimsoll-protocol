@@ -1,0 +1,267 @@
+"""
+Engine 0: Global Threat Feed — The Swarm's Immune System (Python SDK).
+
+Every Aegis firewall instance can optionally maintain a local threat filter
+containing confirmed attacker addresses, malicious function selectors, and
+drainer contract hashes. This filter runs BEFORE Engines 1-6 and provides
+sub-millisecond O(1) lookup.
+
+Architecture
+------------
+::
+
+    Aegis Cloud (compiles Sybil consensus)
+          |
+          v  WebSocket / REST push
+    +---------------------------------+
+    |  Local Threat Filter (Engine 0) | <-- O(1) set lookup
+    |  - Attacker addresses           |
+    |  - Malicious selectors          |
+    |  - Drainer contract hashes      |
+    +---------------------------------+
+          |
+          v  Pre-flight check (before Engine 1-6)
+      BLOCK or PASS
+
+Anti-Griefing
+-------------
+Verified protocols with significant TVL are IMMUNE to blacklisting:
+- Uniswap, Aave, Compound, 1inch, SushiSwap, 0x
+- Any address in the ``immune_addresses`` config set
+"""
+
+from __future__ import annotations
+
+import hashlib
+import time
+from dataclasses import dataclass, field
+from typing import Any, Set
+
+from aegis.verdict import Verdict, VerdictCode
+
+
+# ── Well-known protocol addresses (always immune) ─────────────────────
+
+IMMUNE_PROTOCOLS: frozenset[str] = frozenset({
+    "0x7a250d5630b4cf539739df2c5dacb4c659f2488d",  # Uniswap V2 Router
+    "0xe592427a0aece92de3edee1f18e0157c05861564",  # Uniswap V3 Router
+    "0x68b3465833fb72a70ecdf485e0e4c7bd8665fc45",  # Uniswap Universal Router
+    "0x87870bca3f3fd6335c3f4ce8392d69350b4fa4e2",  # Aave V3 Pool
+    "0x7d2768de32b0b80b7a3454c06bdac94a69ddc7a9",  # Aave V2 Pool
+    "0x3d9819210a31b4961b30ef54be2aed79b9c9cd3b",  # Compound Comptroller
+    "0xdef1c0ded9bec7f1a1670819833240f027b25eff",  # 0x Exchange Proxy
+    "0x1111111254eeb25477b68fb85ed929f73a960582",  # 1inch Router
+    "0xd9e1ce17f2641f24ae83637ab66a2cca9c378b9f",  # SushiSwap Router
+})
+
+
+@dataclass
+class ThreatFeedConfig:
+    """Configuration for Engine 0."""
+
+    enabled: bool = False
+    """Enable Engine 0 pre-flight checks. Disabled by default for
+    backward compatibility."""
+
+    immune_addresses: Set[str] = field(default_factory=set)
+    """Additional addresses immune to blacklisting (beyond built-in protocols)."""
+
+
+@dataclass
+class ThreatFeedEngine:
+    """Engine 0: Global Bloom Filter pre-check.
+
+    Maintains local sets of blacklisted addresses, selectors, and
+    calldata hashes. Provides O(1) lookup before the heavier engines
+    run.
+
+    Usage::
+
+        engine = ThreatFeedEngine()
+        engine.add_address("0xHacker123")
+
+        verdict = engine.evaluate({"target": "0xhacker123", "amount": 100})
+        assert verdict.blocked
+    """
+
+    config: ThreatFeedConfig = field(default_factory=ThreatFeedConfig)
+
+    # Blacklisted entries (all lowercase, 0x-prefixed where applicable)
+    _addresses: Set[str] = field(default_factory=set, init=False, repr=False)
+    _selectors: Set[str] = field(default_factory=set, init=False, repr=False)
+    _calldata_hashes: Set[str] = field(default_factory=set, init=False, repr=False)
+
+    # Metadata
+    _version: int = field(default=0, init=False, repr=False)
+    _consensus_count: int = field(default=0, init=False, repr=False)
+    _last_updated: float = field(default=0.0, init=False, repr=False)
+    _block_count: int = field(default=0, init=False, repr=False)
+
+    # ── Mutation methods (called on Cloud push) ──────────────────
+
+    def add_address(self, address: str) -> None:
+        """Add an address to the blacklist."""
+        self._addresses.add(address.lower())
+
+    def add_selector(self, selector: str) -> None:
+        """Add a function selector to the blacklist (e.g., '0xa9059cbb')."""
+        self._selectors.add(selector.lower())
+
+    def add_calldata_hash(self, hash_hex: str) -> None:
+        """Add a calldata hash to the blacklist."""
+        self._calldata_hashes.add(hash_hex)
+
+    def replace_from_cloud(
+        self,
+        addresses: list[str],
+        selectors: list[str],
+        calldata_hashes: list[str],
+        version: int,
+        consensus_count: int,
+    ) -> None:
+        """Replace the entire filter with a Cloud-pushed update."""
+        self._addresses = {a.lower() for a in addresses}
+        self._selectors = {s.lower() for s in selectors}
+        self._calldata_hashes = set(calldata_hashes)
+        self._version = version
+        self._consensus_count = consensus_count
+        self._last_updated = time.time()
+
+    # ── Anti-Griefing ────────────────────────────────────────────
+
+    def is_immune(self, address: str) -> bool:
+        """Check if an address is immune to Swarm blacklisting."""
+        addr_lower = address.lower()
+        if addr_lower in IMMUNE_PROTOCOLS:
+            return True
+        if addr_lower in {a.lower() for a in self.config.immune_addresses}:
+            return True
+        return False
+
+    # ── Evaluation ───────────────────────────────────────────────
+
+    def evaluate(self, payload: dict[str, Any]) -> Verdict:
+        """Run Engine 0 pre-flight check.
+
+        Checks the payload's ``target`` address, ``function`` selector,
+        and calldata hash against the global blacklist.
+
+        Parameters
+        ----------
+        payload : dict
+            Must contain ``target`` (address). Optionally ``function``
+            (selector string) and ``data`` (hex calldata).
+
+        Returns
+        -------
+        Verdict
+            ALLOW if not in blacklist, BLOCK_GLOBAL_BLACKLIST if matched.
+        """
+        if not self.config.enabled:
+            return Verdict(
+                code=VerdictCode.ALLOW,
+                reason="Engine 0 disabled",
+                engine="ThreatFeed",
+            )
+
+        if self.is_empty():
+            return Verdict(
+                code=VerdictCode.ALLOW,
+                reason="No threat feed loaded",
+                engine="ThreatFeed",
+            )
+
+        target = payload.get("target", "")
+
+        # Check 1: Address blacklist
+        if target and target.lower() in self._addresses:
+            # Anti-griefing: immune addresses cannot be blacklisted
+            if not self.is_immune(target):
+                self._block_count += 1
+                return Verdict(
+                    code=VerdictCode.BLOCK_GLOBAL_BLACKLIST,
+                    reason=(
+                        f"ENGINE 0: Address {target} is globally blacklisted "
+                        f"(Swarm consensus: {self._consensus_count} agents, "
+                        f"v{self._version})"
+                    ),
+                    engine="ThreatFeed",
+                    metadata={
+                        "blocked_field": "address",
+                        "version": self._version,
+                        "consensus": self._consensus_count,
+                    },
+                )
+
+        # Check 2: Function selector blacklist
+        selector = payload.get("function", "")
+        if selector and selector.lower() in self._selectors:
+            self._block_count += 1
+            return Verdict(
+                code=VerdictCode.BLOCK_GLOBAL_BLACKLIST,
+                reason=(
+                    f"ENGINE 0: Selector {selector} is globally blacklisted "
+                    f"(known drainer signature)"
+                ),
+                engine="ThreatFeed",
+                metadata={"blocked_field": "selector"},
+            )
+
+        # Check 3: Calldata hash blacklist
+        data_hex = payload.get("data", "")
+        if data_hex:
+            calldata_hash = hashlib.sha256(
+                data_hex.encode() if isinstance(data_hex, str) else data_hex
+            ).hexdigest()[:16]
+            if calldata_hash in self._calldata_hashes:
+                self._block_count += 1
+                return Verdict(
+                    code=VerdictCode.BLOCK_GLOBAL_BLACKLIST,
+                    reason=(
+                        f"ENGINE 0: Calldata hash {calldata_hash} matches "
+                        f"known exploit payload"
+                    ),
+                    engine="ThreatFeed",
+                    metadata={"blocked_field": "calldata_hash"},
+                )
+
+        return Verdict(
+            code=VerdictCode.ALLOW,
+            reason="Engine 0 passed",
+            engine="ThreatFeed",
+        )
+
+    # ── Helpers ──────────────────────────────────────────────────
+
+    def is_empty(self) -> bool:
+        """True if no threats are loaded."""
+        return len(self._addresses) == 0 and len(self._selectors) == 0 and len(self._calldata_hashes) == 0
+
+    @property
+    def size(self) -> int:
+        """Total number of entries in the filter."""
+        return len(self._addresses) + len(self._selectors) + len(self._calldata_hashes)
+
+    @property
+    def stats(self) -> dict[str, Any]:
+        """Return engine statistics."""
+        return {
+            "addresses": len(self._addresses),
+            "selectors": len(self._selectors),
+            "calldata_hashes": len(self._calldata_hashes),
+            "total_entries": self.size,
+            "version": self._version,
+            "consensus_count": self._consensus_count,
+            "blocks": self._block_count,
+            "last_updated": self._last_updated,
+        }
+
+    def reset(self) -> None:
+        """Clear all state."""
+        self._addresses.clear()
+        self._selectors.clear()
+        self._calldata_hashes.clear()
+        self._version = 0
+        self._consensus_count = 0
+        self._last_updated = 0.0
+        self._block_count = 0

@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.eggs/
+*.egg
+.venv
+venv/
+
+# Environment / secrets
+.env
+*.key
+*.pem
+
+# Rust
+aegis-rpc/target/
+
+# Solidity / Foundry
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+
+# Node / Next.js
+dapp/node_modules/
+dapp/.next/
+dapp/out/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store

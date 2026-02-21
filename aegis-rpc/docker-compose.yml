@@ -1,0 +1,51 @@
+# ============================================================
+# Aegis RPC Proxy — Docker Compose
+#
+# Usage:
+#   cp .env.example .env
+#   docker compose up -d
+#
+# Architecture:
+#   aegis-rpc:8545 ← AI Agent sends txs here
+#        │
+#        ├── Pre-flight simulation (revm fork)
+#        ├── Physics enforcement
+#        ├── Fee collection (1-2 bps)
+#        └── MEV-shielded routing (Flashbots Protect)
+#             │
+#             └── Upstream Ethereum RPC (Alchemy/Infura)
+# ============================================================
+
+services:
+  aegis-rpc:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${AEGIS_PORT:-8545}:8545"
+    environment:
+      - AEGIS_UPSTREAM_RPC=${AEGIS_UPSTREAM_RPC:-https://eth-mainnet.g.alchemy.com/v2/demo}
+      - AEGIS_HOST=0.0.0.0
+      - AEGIS_PORT=8545
+      - AEGIS_FEE_BPS=${AEGIS_FEE_BPS:-2}
+      - AEGIS_FEE_COLLECTOR=${AEGIS_FEE_COLLECTOR:-0x0000000000000000000000000000000000000000}
+      - AEGIS_MAX_LOSS_PCT=${AEGIS_MAX_LOSS_PCT:-20.0}
+      - AEGIS_BLOCK_APPROVALS=${AEGIS_BLOCK_APPROVALS:-true}
+      - AEGIS_FLASHBOTS_ENABLED=${AEGIS_FLASHBOTS_ENABLED:-false}
+      - AEGIS_FLASHBOTS_RELAY=${AEGIS_FLASHBOTS_RELAY:-https://relay.flashbots.net}
+      - AEGIS_FORK_BLOCK=${AEGIS_FORK_BLOCK:-0}
+      - RUST_LOG=${RUST_LOG:-aegis_rpc=info,tower_http=debug}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8545/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2"
+        reservations:
+          memory: 512M
+          cpus: "0.5"
