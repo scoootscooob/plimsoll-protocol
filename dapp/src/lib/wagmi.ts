@@ -1,5 +1,10 @@
 /**
  * Wagmi + ConnectKit configuration for Plimsoll dApp.
+ *
+ * Family wallet is disabled — its GraphQL signing backend consistently
+ * returns "Signing request not found" errors when sending transactions.
+ * This is a known issue with Family's infrastructure, not our contracts.
+ * Users can connect via MetaMask, Coinbase Wallet, or WalletConnect.
  */
 
 import { getDefaultConfig } from "connectkit";
@@ -24,5 +29,6 @@ export const config = createConfig(
     appName: "Plimsoll Capital Delegation",
     appDescription: "Manage AI agent vaults with on-chain physics enforcement",
     appUrl: "https://plimsoll.network",
+    enableFamily: false,
   })
 );
