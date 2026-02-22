@@ -1,0 +1,16 @@
+# Ignore everything except the dapp directory
+contracts/
+indexer/
+plimsoll-rpc/
+*.md
+.github/
+.env
+*.key
+*.pem
+
+# Large directories
+**/node_modules/
+**/target/
+**/.next/
+**/out/
+**/__pycache__/

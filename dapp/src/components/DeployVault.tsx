@@ -187,15 +187,39 @@ forge script script/DeployFactory.s.sol \\
           )}
 
           {createVault.error && (
-            <p className="font-mono text-sm text-terracotta">
-              {(createVault.error as Error).message?.slice(0, 120)}
-            </p>
+            <div className="border border-terracotta/30 bg-terracotta/5 p-4 space-y-2">
+              <p className="font-mono text-sm text-terracotta">
+                {(createVault.error as Error).message?.includes("Signing request not found")
+                  ? "Wallet session expired. Please disconnect and reconnect your wallet, then try again."
+                  : (createVault.error as Error).message?.includes("User rejected")
+                    ? "Transaction was rejected in your wallet."
+                    : (createVault.error as Error).message?.slice(0, 200)}
+              </p>
+              <button
+                className="font-mono text-xs text-terracotta underline"
+                onClick={handleDeploy}
+              >
+                Retry
+              </button>
+            </div>
           )}
 
           {acceptOwnership.error && (
-            <p className="font-mono text-sm text-terracotta">
-              {(acceptOwnership.error as Error).message?.slice(0, 120)}
-            </p>
+            <div className="border border-terracotta/30 bg-terracotta/5 p-4 space-y-2">
+              <p className="font-mono text-sm text-terracotta">
+                {(acceptOwnership.error as Error).message?.includes("Signing request not found")
+                  ? "Wallet session expired. Please disconnect and reconnect your wallet, then try again."
+                  : (acceptOwnership.error as Error).message?.includes("User rejected")
+                    ? "Transaction was rejected in your wallet."
+                    : (acceptOwnership.error as Error).message?.slice(0, 200)}
+              </p>
+              <button
+                className="font-mono text-xs text-terracotta underline"
+                onClick={handleAccept}
+              >
+                Retry
+              </button>
+            </div>
           )}
         </div>
       )}
