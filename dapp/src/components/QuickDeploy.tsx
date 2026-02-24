@@ -53,7 +53,7 @@ export function QuickDeploy({ onComplete }: Props) {
 
   // Build the RPC URL for the deployed vault
   const rpcUrl = deployedVault
-    ? `https://rpc.plimsoll.network/v1/${deployedVault}`
+    ? `https://plimsoll-protocol-production.up.railway.app/v1/${deployedVault}`
     : null;
 
   // Auto-complete after ownership accepted
