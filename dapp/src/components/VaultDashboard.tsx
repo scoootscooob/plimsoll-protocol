@@ -16,6 +16,7 @@ import { DepositWithdraw } from "./DepositWithdraw";
 import { EmergencyPanel } from "./EmergencyPanel";
 import { ModuleStatus } from "./ModuleStatus";
 import { DeployVault } from "./DeployVault";
+import { QuickDeploy } from "./QuickDeploy";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000" as Address;
 
@@ -93,10 +94,23 @@ export function VaultDashboard() {
   }
 
   const vaultList = (ownerVaults.data as Address[] | undefined) || [];
+  const isLoadingVaults = ownerVaults.isLoading;
+
+  // ── First-time user: show QuickDeploy ───────────────────────
+  if (!isLoadingVaults && vaultList.length === 0 && !activeVault) {
+    return (
+      <QuickDeploy
+        onComplete={(addr) => {
+          setActiveVault(addr);
+          ownerVaults.refetch();
+        }}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6">
-      {/* Deploy New Vault */}
+      {/* Deploy New Vault (advanced — for users who already have vaults) */}
       <DeployVault
         onVaultCreated={(addr) => {
           setActiveVault(addr);
