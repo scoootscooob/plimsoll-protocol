@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { type Address } from "viem";
-import { useCreateVault, useAcceptOwnership, isFactoryDeployed } from "@/hooks/useFactory";
+import { useCreateVault, useAcceptOwnership, useFactoryAddress } from "@/hooks/useFactory";
 
 interface Props {
   onVaultCreated?: (vaultAddress: Address) => void;
@@ -14,10 +14,20 @@ export function DeployVault({ onVaultCreated }: Props) {
   const [maxDrawdownBps, setMaxDrawdownBps] = useState("500");
   const [initialDeposit, setInitialDeposit] = useState("");
   const [isExpanded, setIsExpanded] = useState(false);
-  const [deployedVault, setDeployedVault] = useState<Address | null>(null);
 
+  const { isFactoryDeployed, chainKey } = useFactoryAddress();
   const createVault = useCreateVault();
   const acceptOwnership = useAcceptOwnership();
+
+  // Auto-set the deployed vault address from tx receipt
+  const deployedVault = createVault.vaultAddress;
+
+  // Once accept ownership succeeds, auto-load the vault
+  useEffect(() => {
+    if (acceptOwnership.isSuccess && deployedVault && onVaultCreated) {
+      onVaultCreated(deployedVault);
+    }
+  }, [acceptOwnership.isSuccess, deployedVault, onVaultCreated]);
 
   const handleDeploy = () => {
     createVault.createVault(
@@ -34,29 +44,37 @@ export function DeployVault({ onVaultCreated }: Props) {
     }
   };
 
+  const chainLabel = chainKey === "base" ? "Base" : chainKey === "sepolia" ? "Sepolia" : chainKey;
+
   return (
     <div className="card">
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-mono text-xs text-ink/60 tracking-widest uppercase">
           Deploy New Vault
         </h3>
-        <button
-          className="btn-secondary text-xs"
-          onClick={() => setIsExpanded(!isExpanded)}
-        >
-          {isExpanded ? "Collapse" : "Expand"}
-        </button>
+        <div className="flex items-center gap-3">
+          <span className="font-mono text-[10px] text-ink/40 tracking-widest uppercase">
+            {chainLabel}
+          </span>
+          <button
+            className="btn-secondary text-xs"
+            onClick={() => setIsExpanded(!isExpanded)}
+          >
+            {isExpanded ? "Collapse" : "Expand"}
+          </button>
+        </div>
       </div>
 
       {isExpanded && !isFactoryDeployed && (
         <div className="border-t border-ink/20 pt-4">
           <p className="font-mono text-sm text-ink/60">
-            Factory contract not yet deployed to Sepolia. Deploy via:
+            Factory contract not yet deployed to {chainLabel}. Switch your wallet
+            to a supported chain, or deploy via:
           </p>
           <pre className="font-mono text-xs text-ink/40 mt-2 p-3 bg-surface overflow-x-auto">
 {`cd contracts
 forge script script/DeployFactory.s.sol \\
-  --rpc-url $SEPOLIA_RPC --broadcast`}
+  --rpc-url $${chainKey.toUpperCase()}_RPC --broadcast`}
           </pre>
           <p className="font-mono text-xs text-ink/40 mt-2">
             Then update the factory address in <code>contracts.ts</code>.
@@ -131,32 +149,30 @@ forge script script/DeployFactory.s.sol \\
               ? "Signing..."
               : createVault.isConfirming
                 ? "Deploying..."
-                : "Deploy Vault"}
+                : `Deploy Vault on ${chainLabel}`}
           </button>
 
-          {createVault.isSuccess && !acceptOwnership.isSuccess && (
+          {/* Vault deployed — show address and accept ownership */}
+          {createVault.isSuccess && deployedVault && !acceptOwnership.isSuccess && (
             <div className="border border-ink/20 p-4 space-y-3">
-              <p className="font-mono text-sm text-ink/60">
-                Vault deployed. Enter the vault address from the transaction
-                receipt, then accept ownership to finalize.
+              <p className="font-mono text-sm text-ink/80">
+                Vault deployed successfully!
               </p>
-              <div>
-                <label className="label-text">Vault Address</label>
-                <input
-                  className="input-field text-sm"
-                  type="text"
-                  placeholder="0x... (from transaction receipt)"
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val.startsWith("0x") && val.length === 42) {
-                      setDeployedVault(val as Address);
-                    }
-                  }}
-                />
+              <div className="bg-surface p-3 border border-ink/10">
+                <span className="font-mono text-[10px] text-terracotta tracking-widest uppercase block mb-1">
+                  Vault Address
+                </span>
+                <span className="font-mono text-sm text-ink break-all select-all">
+                  {deployedVault}
+                </span>
               </div>
+              <p className="font-mono text-xs text-ink/50">
+                Accept ownership to finalize your vault. This is a security step
+                that ensures only you control it.
+              </p>
               <button
                 className="btn-primary w-full"
-                disabled={!deployedVault || acceptOwnership.isPending || acceptOwnership.isConfirming}
+                disabled={acceptOwnership.isPending || acceptOwnership.isConfirming}
                 onClick={handleAccept}
               >
                 {acceptOwnership.isPending
@@ -168,11 +184,42 @@ forge script script/DeployFactory.s.sol \\
             </div>
           )}
 
+          {/* Fallback: tx succeeded but couldn't parse vault address */}
+          {createVault.isSuccess && !deployedVault && !acceptOwnership.isSuccess && (
+            <div className="border border-ink/20 p-4 space-y-3">
+              <p className="font-mono text-sm text-ink/60">
+                Vault deployed. Check the transaction on{" "}
+                <a
+                  href={
+                    chainKey === "base"
+                      ? `https://basescan.org/tx/${createVault.hash}`
+                      : `https://sepolia.etherscan.io/tx/${createVault.hash}`
+                  }
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-terracotta underline"
+                >
+                  {chainKey === "base" ? "Basescan" : "Etherscan"}
+                </a>{" "}
+                for your vault address.
+              </p>
+            </div>
+          )}
+
+          {/* Ownership accepted */}
           {acceptOwnership.isSuccess && deployedVault && (
             <div className="border border-ink/20 p-4">
-              <p className="font-mono text-sm text-ink/60 mb-2">
-                Ownership accepted. Vault is ready.
+              <p className="font-mono text-sm text-ink/80 mb-3">
+                Vault is ready. You are the owner.
               </p>
+              <div className="bg-surface p-3 border border-ink/10 mb-3">
+                <span className="font-mono text-[10px] text-terracotta tracking-widest uppercase block mb-1">
+                  Your Vault
+                </span>
+                <span className="font-mono text-sm text-ink break-all select-all">
+                  {deployedVault}
+                </span>
+              </div>
               <button
                 className="btn-secondary w-full"
                 onClick={() => {
@@ -181,7 +228,7 @@ forge script script/DeployFactory.s.sol \\
                   }
                 }}
               >
-                Load Vault
+                Load Vault Dashboard
               </button>
             </div>
           )}
